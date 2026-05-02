@@ -1,4 +1,4 @@
-const bv = (b as Record<string, unknown>)[col]'use client'
+'use client'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ALL_FRANCHISES, ACTIVE_FRANCHISES, DEFUNCT_FRANCHISES } from '@/lib/franchise'
@@ -7,13 +7,11 @@ import PlayerModal from '@/components/PlayerModal'
 
 const PAGE = 50
 
-// Aggregate season-level rows into career totals (used when filters active)
 function aggregateSeasons(seasons: PlayerSeasonStats[]): CareerRow[] {
   const byPlayer = new Map<string, PlayerSeasonStats[]>()
   for (const s of seasons) {
     const arr = byPlayer.get(s.player) ?? []
-    arr.push(s)
-    byPlayer.set(s.player, arr)
+    arr.push(s); byPlayer.set(s.player, arr)
   }
   return Array.from(byPlayer.values()).map(ss => {
     const totalGames = ss.reduce((s,r) => s+r.games, 0) || 1
@@ -22,20 +20,17 @@ function aggregateSeasons(seasons: PlayerSeasonStats[]): CareerRow[] {
       ss.reduce((s,r) => s+((r[k] as number)??0)*r.games, 0) / totalGames
     const gmscSum = ss.reduce((s,r) => s+(r.gmsc_sum??0), 0)
     return {
-      player: ss[0].player,
-      games: totalGames,
-      wins,
+      player: ss[0].player, games: totalGames, wins,
       win_pct: Math.round(wins/totalGames*1000)/10,
-      pts_avg:  wa('pts_avg'),  ast_avg: wa('ast_avg'),  trb_avg: wa('trb_avg'),
-      stl_avg:  wa('stl_avg'),  blk_avg: wa('blk_avg'),  tov_avg: wa('tov_avg'),
-      fg_pct:   wa('fg_pct_avg'), three_p_pct: wa('three_p_pct_avg'),
-      ft_pct:   wa('ft_pct_avg'), ts_pct: wa('ts_pct_avg'),
-      mp_avg:   wa('mp_avg'),   bpm_avg: wa('bpm_avg'),
-      gmsc_avg: gmscSum / totalGames,
-      gmsc_sum: gmscSum,
+      pts_avg: wa('pts_avg'), ast_avg: wa('ast_avg'), trb_avg: wa('trb_avg'),
+      stl_avg: wa('stl_avg'), blk_avg: wa('blk_avg'), tov_avg: wa('tov_avg'),
+      fg_pct: wa('fg_pct_avg'), three_p_pct: wa('three_p_pct_avg'),
+      ft_pct: wa('ft_pct_avg'), ts_pct: wa('ts_pct_avg'),
+      mp_avg: wa('mp_avg'), bpm_avg: wa('bpm_avg'),
+      gmsc_avg: gmscSum / totalGames, gmsc_sum: gmscSum,
       pts_total: ss.reduce((s,r) => s+(r.pts_total??0), 0),
       first_season: Math.min(...ss.map(s => s.season)),
-      last_season:  Math.max(...ss.map(s => s.season)),
+      last_season: Math.max(...ss.map(s => s.season)),
       deepest_round: Math.max(...ss.map(s => s.deepest_round??0)),
       finals_appearances: ss.filter(s => s.finals_appearance).length,
       championships: ss.filter(s => s.won_championship).length,
@@ -45,14 +40,14 @@ function aggregateSeasons(seasons: PlayerSeasonStats[]): CareerRow[] {
 
 function sortCareer(rows: CareerRow[], col: string, dir: 'asc'|'desc'): CareerRow[] {
   return [...rows].sort((a,b) => {
-    const av = (a as unknown as Record<string, unknown>)[col]
-const bv = (b as unknown as Record<string, unknown>)[col]
+    const av = (a as unknown as Record<string,unknown>)[col]
+    const bv = (b as unknown as Record<string,unknown>)[col]
     if (av == null && bv == null) return 0
     if (av == null) return 1
     if (bv == null) return -1
     if (typeof av === 'number' && typeof bv === 'number')
-      return dir==='asc' ? av-bv : bv-av
-    return dir==='asc'
+      return dir === 'asc' ? av-bv : bv-av
+    return dir === 'asc'
       ? String(av).localeCompare(String(bv))
       : String(bv).localeCompare(String(av))
   })
@@ -61,26 +56,33 @@ const bv = (b as unknown as Record<string, unknown>)[col]
 const pct = (v:number|null) => v!=null?(v*100).toFixed(1)+'%':'—'
 const num = (v:number|null, d=1) => v!=null?Number(v).toFixed(d):'—'
 
+function DeepestCell({r}:{r:CareerRow}) {
+  if (r.championships > 0) return <span style={{color:'var(--gold)',fontWeight:600}}>{r.championships}× 🏆 Title</span>
+  if (r.finals_appearances > 0) return <span style={{color:'var(--text2)'}}>Finals</span>
+  if (r.deepest_round >= 3) return <span style={{color:'var(--text3)'}}>Conf Finals</span>
+  if (r.deepest_round === 2) return <span style={{color:'var(--text3)'}}>2nd Round</span>
+  return <span style={{color:'var(--text3)'}}>1st Round</span>
+}
+
 export default function AggregatePage() {
-  const [search,     setSearch]     = useState('')
-  const [franchise,  setFranchise]  = useState('')
-  const [seasonMin,  setSeasonMin]  = useState(1947)
-  const [seasonMax,  setSeasonMax]  = useState(2026)
-  const [minGames,   setMinGames]   = useState('')
-  const [sortCol,    setSortCol]    = useState('gmsc_sum')
-  const [sortDir,    setSortDir]    = useState<'asc'|'desc'>('desc')
-  const [rows,       setRows]       = useState<CareerRow[]>([])
-  const [total,      setTotal]      = useState(0)
-  const [page,       setPage]       = useState(0)
-  const [loading,    setLoading]    = useState(false)
-  const [modal,      setModal]      = useState<string|null>(null)
+  const [search, setSearch]       = useState('')
+  const [franchise, setFranchise] = useState('')
+  const [seasonMin, setSeasonMin] = useState(1947)
+  const [seasonMax, setSeasonMax] = useState(2026)
+  const [minGames, setMinGames]   = useState('')
+  const [sortCol, setSortCol]     = useState('gmsc_sum')
+  const [sortDir, setSortDir]     = useState<'asc'|'desc'>('desc')
+  const [rows, setRows]           = useState<CareerRow[]>([])
+  const [total, setTotal]         = useState(0)
+  const [page, setPage]           = useState(0)
+  const [loading, setLoading]     = useState(false)
+  const [modal, setModal]         = useState<string|null>(null)
   const debRef = useRef<ReturnType<typeof setTimeout>>()
 
   const hasAdvancedFilters = franchise !== '' || seasonMin !== 1947 || seasonMax !== 2026
 
   const loadFiltered = useCallback(async (s:string,fr:string,smn:number,smx:number,mg:string,sc:string,sd:'asc'|'desc',pg:number) => {
     setLoading(true)
-    // Fetch all matching season rows
     let allSeasons: PlayerSeasonStats[] = []
     let from = 0
     while (true) {
@@ -94,14 +96,13 @@ export default function AggregatePage() {
       allSeasons.push(...(data as PlayerSeasonStats[]))
       if (data.length < 1000) break
       from += 1000
-      if (from > 30000) break // safety
+      if (from > 30000) break
     }
     let aggregated = aggregateSeasons(allSeasons)
     if (s) aggregated = aggregated.filter(r => r.player.toLowerCase().includes(s.toLowerCase()))
     if (mg) aggregated = aggregated.filter(r => r.games >= Number(mg))
     aggregated = sortCareer(aggregated, sc, sd)
-    const total = aggregated.length
-    setTotal(total)
+    setTotal(aggregated.length)
     setRows(aggregated.slice(pg*PAGE, (pg+1)*PAGE))
     setLoading(false)
   }, [])
@@ -120,11 +121,11 @@ export default function AggregatePage() {
 
   const triggerLoad = useCallback((pg:number) => {
     if (hasAdvancedFilters) {
-      loadFiltered(search, franchise, seasonMin, seasonMax, minGames, sortCol, sortDir, pg)
+      loadFiltered(search,franchise,seasonMin,seasonMax,minGames,sortCol,sortDir,pg)
     } else {
-      loadDirect(search, minGames, sortCol, sortDir, pg)
+      loadDirect(search,minGames,sortCol,sortDir,pg)
     }
-  }, [search, franchise, seasonMin, seasonMax, minGames, sortCol, sortDir, hasAdvancedFilters, loadFiltered, loadDirect])
+  }, [search,franchise,seasonMin,seasonMax,minGames,sortCol,sortDir,hasAdvancedFilters,loadFiltered,loadDirect])
 
   useEffect(() => {
     clearTimeout(debRef.current)
@@ -147,28 +148,19 @@ export default function AggregatePage() {
     )
   }
 
-  const champLabel = (r:CareerRow) => {
-    if (!r.finals_appearances) return '—'
-    const champ = r.championships ?? 0
-    const finals = r.finals_appearances
-    if (champ === 0) return `${finals}× 🥈`
-    if (champ === finals) return `${champ}× 🏆`
-    return `${champ}× 🏆 ${finals-champ}× 🥈`
-  }
-
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'calc(100vh - 52px)',overflow:'hidden'}}>
+    <div style={{display:'flex',flexDirection:'column',height:'calc(100vh - 54px)',overflow:'hidden'}}>
       <div style={{padding:'12px 20px',borderBottom:'1px solid var(--border)',background:'var(--surface)',display:'flex',alignItems:'center',gap:12,flexShrink:0,flexWrap:'wrap'}}>
-        <span style={{fontFamily:'var(--font-head)',fontSize:20,letterSpacing:'0.06em',color:'var(--blue)'}}>CAREER LEADERS</span>
+        <span style={{fontFamily:'var(--font-head)',fontSize:20,color:'var(--blue)'}}>Career Leaders</span>
         <input type="search" placeholder="Search player…" value={search} onChange={e=>setSearch(e.target.value)} style={{width:180}}/>
-        <select value={franchise} onChange={e=>setFranchise(e.target.value)} style={{width:160}}>
+        <select value={franchise} onChange={e=>setFranchise(e.target.value)} style={{width:180}}>
           <option value="">All franchises</option>
           <optgroup label="Active Franchises">
-              {ACTIVE_FRANCHISES.map(f=><option key={f.abbr} value={f.abbr}>{f.name}</option>)}
-            </optgroup>
-            <optgroup label="── Defunct ──">
-              {DEFUNCT_FRANCHISES.map(f=><option key={f.abbr} value={f.abbr}>{f.name}</option>)}
-            </optgroup>
+            {ACTIVE_FRANCHISES.map(f=><option key={f.abbr} value={f.abbr}>{f.name}</option>)}
+          </optgroup>
+          <optgroup label="── Defunct ──">
+            {DEFUNCT_FRANCHISES.map(f=><option key={f.abbr} value={f.abbr}>{f.name}</option>)}
+          </optgroup>
         </select>
         <div style={{display:'flex',alignItems:'center',gap:4}}>
           <label style={{fontSize:12,color:'var(--text2)',whiteSpace:'nowrap'}}>Seasons</label>
@@ -181,8 +173,8 @@ export default function AggregatePage() {
           <input type="number" placeholder="—" value={minGames} min={1} onChange={e=>setMinGames(e.target.value)} style={{width:64}}/>
         </div>
         {hasAdvancedFilters && (
-          <span style={{fontSize:11,color:'var(--blue)',background:'var(--blue-dim)',padding:'3px 8px',borderRadius:3,border:'1px solid rgba(29,66,138,.2)'}}>
-            Filtered — aggregating by selected seasons
+          <span style={{fontSize:11,color:'var(--blue)',background:'var(--blue-dim)',padding:'3px 8px',borderRadius:3,border:'1px solid rgba(29,52,97,.2)'}}>
+            Filtered — aggregating selected seasons
           </span>
         )}
         <span style={{marginLeft:'auto',fontSize:13,color:'var(--text2)'}}>{loading?'Loading…':`${total.toLocaleString()} players`}</span>
@@ -197,52 +189,35 @@ export default function AggregatePage() {
               <th style={{position:'sticky',left:28,background:'var(--bg)',zIndex:1,minWidth:180,cursor:'pointer'}} className="sortable" onClick={()=>sort('player')}>
                 Player{sortCol==='player'?(sortDir==='desc'?' ↓':' ↑'):''}
               </th>
-              <Th col="games">G</Th>
-              <Th col="wins">W</Th>
-              <Th col="win_pct">W%</Th>
-              <Th col="championships">Deepest</Th>
-              <Th col="first_season">From</Th>
-              <Th col="last_season">To</Th>
-              <Th col="pts_avg">PTS</Th>
-              <Th col="ast_avg">AST</Th>
-              <Th col="trb_avg">REB</Th>
-              <Th col="stl_avg">STL</Th>
-              <Th col="blk_avg">BLK</Th>
-              <Th col="tov_avg">TOV</Th>
-              <Th col="fg_pct">FG%</Th>
-              <Th col="three_p_pct">3P%</Th>
-              <Th col="ft_pct">FT%</Th>
-              <Th col="ts_pct">TS%</Th>
-              <Th col="mp_avg">MIN</Th>
-              <Th col="bpm_avg">BPM</Th>
-              <Th col="gmsc_avg">GmSc/G</Th>
-              <Th col="gmsc_sum">GmSc Tot</Th>
+              <Th col="games">G</Th><Th col="wins">W</Th><Th col="win_pct">W%</Th>
+              <th className="num">Deepest</th>
+              <Th col="first_season">From</Th><Th col="last_season">To</Th>
+              <Th col="pts_avg">PTS</Th><Th col="ast_avg">AST</Th><Th col="trb_avg">REB</Th>
+              <Th col="stl_avg">STL</Th><Th col="blk_avg">BLK</Th><Th col="tov_avg">TOV</Th>
+              <Th col="fg_pct">FG%</Th><Th col="three_p_pct">3P%</Th>
+              <Th col="ft_pct">FT%</Th><Th col="ts_pct">TS%</Th>
+              <Th col="mp_avg">MIN</Th><Th col="bpm_avg">BPM</Th>
+              <Th col="gmsc_avg">GS/G</Th><Th col="gmsc_sum">GS Total</Th>
             </tr></thead>
             <tbody>
               {rows.map((r,i)=>(
                 <tr key={r.player}>
-                  <td style={{position:'sticky',left:0,background:'var(--surface)',zIndex:1,color:'var(--text3)',fontSize:12}}>{page*PAGE+i+1}</td>
+                  <td style={{position:'sticky',left:0,background:'var(--surface)',zIndex:1,color:'var(--text3)',fontSize:12,fontFamily:'var(--font-mono)'}}>{page*PAGE+i+1}</td>
                   <td style={{position:'sticky',left:28,background:'var(--surface)',zIndex:1}}>
                     <span className="player-cell" onClick={()=>setModal(r.player)}>{r.player}</span>
                   </td>
                   <td className="num">{r.games}</td>
                   <td className="num win">{r.wins}</td>
                   <td className="num">{r.win_pct!=null?Number(r.win_pct).toFixed(1)+'%':'—'}</td>
-                  <td style={{fontSize:12,whiteSpace:'nowrap'}}>{champLabel(r)}</td>
-                  <td className="num">{r.first_season}</td>
-                  <td className="num">{r.last_season}</td>
+                  <td style={{fontSize:11,whiteSpace:'nowrap'}}><DeepestCell r={r}/></td>
+                  <td className="num">{r.first_season}</td><td className="num">{r.last_season}</td>
                   <td className="num blue">{num(r.pts_avg)}</td>
-                  <td className="num">{num(r.ast_avg)}</td>
-                  <td className="num">{num(r.trb_avg)}</td>
-                  <td className="num">{num(r.stl_avg)}</td>
-                  <td className="num">{num(r.blk_avg)}</td>
+                  <td className="num">{num(r.ast_avg)}</td><td className="num">{num(r.trb_avg)}</td>
+                  <td className="num">{num(r.stl_avg)}</td><td className="num">{num(r.blk_avg)}</td>
                   <td className="num">{num(r.tov_avg)}</td>
-                  <td className="num">{pct(r.fg_pct)}</td>
-                  <td className="num">{pct(r.three_p_pct)}</td>
-                  <td className="num">{pct(r.ft_pct)}</td>
-                  <td className="num">{pct(r.ts_pct)}</td>
-                  <td className="num">{num(r.mp_avg)}</td>
-                  <td className="num">{num(r.bpm_avg)}</td>
+                  <td className="num">{pct(r.fg_pct)}</td><td className="num">{pct(r.three_p_pct)}</td>
+                  <td className="num">{pct(r.ft_pct)}</td><td className="num">{pct(r.ts_pct)}</td>
+                  <td className="num">{num(r.mp_avg)}</td><td className="num">{num(r.bpm_avg)}</td>
                   <td className="num blue">{num(r.gmsc_avg,2)}</td>
                   <td className="num blue">{num(r.gmsc_sum,1)}</td>
                 </tr>
