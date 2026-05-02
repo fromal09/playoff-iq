@@ -1,4 +1,4 @@
-'use client'
+const bv = (b as Record<string, unknown>)[col]'use client'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ALL_FRANCHISES, ACTIVE_FRANCHISES, DEFUNCT_FRANCHISES } from '@/lib/franchise'
@@ -45,8 +45,8 @@ function aggregateSeasons(seasons: PlayerSeasonStats[]): CareerRow[] {
 
 function sortCareer(rows: CareerRow[], col: string, dir: 'asc'|'desc'): CareerRow[] {
   return [...rows].sort((a,b) => {
-    const av = (a as Record<string,unknown>)[col]
-    const bv = (b as Record<string,unknown>)[col]
+    const av = (a as unknown as Record<string, unknown>)[col]
+const bv = (b as unknown as Record<string, unknown>)[col]
     if (av == null && bv == null) return 0
     if (av == null) return 1
     if (bv == null) return -1
