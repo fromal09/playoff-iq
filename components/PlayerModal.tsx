@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { FRANCHISE_NAMES, FRANCHISE_ROLLUP } from '@/lib/franchise'
+import { FRANCHISE_NAMES, FRANCHISE_ROLLUP, HISTORICAL_TEAM_NAMES } from '@/lib/franchise'
 import { PRESETS, buildLeaderboard } from '@/lib/scoring'
 import type { PlayerSeasonStats, PlayerGame, GoatGameRow } from '@/lib/types'
 
@@ -19,6 +19,32 @@ const STAT_LABELS:Record<string,string>={
 }
 const IS_LOWER:Record<string,boolean>={tov_avg:true}
 const IS_PCT:Record<string,boolean>={fg_pct_avg:true,three_p_pct_avg:true,ft_pct_avg:true,ts_pct_avg:true}
+
+// Map franchise abbrev to the name used in a given season year
+function historicalName(franchise:string, season:number):string{
+  // Teams that changed names — map to the name used at that time
+  const overrides:Record<string,Array<[number,number,string]>>={
+    NOP: [[2002,2005,'New Orleans Hornets'],[2005,2007,'New Orleans/Oklahoma City Hornets'],[2007,2013,'New Orleans Hornets'],[2013,9999,'New Orleans Pelicans']],
+    BRK: [[1967,1977,'New York Nets'],[1977,2012,'New Jersey Nets'],[2012,9999,'Brooklyn Nets']],
+    OKC: [[1967,2008,'Seattle SuperSonics'],[2008,9999,'Oklahoma City Thunder']],
+    WAS: [[1946,1951,'Washington Capitols'],[1963,1974,'Baltimore Bullets'],[1974,1975,'Capital Bullets'],[1975,1997,'Washington Bullets'],[1997,9999,'Washington Wizards']],
+    SAC: [[1945,1958,'Rochester Royals'],[1958,1972,'Cincinnati Royals'],[1972,1975,'Kansas City-Omaha Kings'],[1975,1985,'Kansas City Kings'],[1985,9999,'Sacramento Kings']],
+    GSW: [[1946,1962,'Philadelphia Warriors'],[1962,1971,'San Francisco Warriors'],[1971,9999,'Golden State Warriors']],
+    LAL: [[1947,1960,'Minneapolis Lakers'],[1960,9999,'Los Angeles Lakers']],
+    DET: [[1941,1957,'Fort Wayne Pistons'],[1957,9999,'Detroit Pistons']],
+    ATL: [[1946,1951,'Tri-Cities Blackhawks'],[1951,1955,'Milwaukee Hawks'],[1955,1968,'St. Louis Hawks'],[1968,9999,'Atlanta Hawks']],
+    CHO: [[1988,2002,'Charlotte Hornets'],[2002,2004,'New Orleans Hornets'],[2004,2014,'Charlotte Bobcats'],[2014,9999,'Charlotte Hornets']],
+    HOU: [[1967,1971,'San Diego Rockets'],[1971,9999,'Houston Rockets']],
+    PHI: [[1946,1963,'Syracuse Nationals'],[1963,9999,'Philadelphia 76ers']],
+    LAC: [[1970,1978,'Buffalo Braves'],[1978,1984,'San Diego Clippers'],[1984,9999,'Los Angeles Clippers']],
+  }
+  const list=overrides[franchise]
+  if(list){
+    const match=list.find(([s,e])=>season>=s&&season<e)
+    if(match) return match[2]
+  }
+  return FRANCHISE_NAMES[franchise]??franchise
+}
 
 function rollingAvg(vals:number[],n:number):{idx:number;val:number}[]{
   if(vals.length<n) return []
@@ -753,7 +779,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                         <tr key={r.season} style={{background:isC?'rgba(154,110,28,0.08)':undefined}}>
                           <td style={{fontSize:15,width:28}}>{isC?'🏆':isF?'🥈':''}</td>
                           <td style={{fontWeight:700,color:isC?'var(--gold)':'var(--blue)',fontFamily:'var(--font-mono)'}}>{r.season}</td>
-                          <td style={{fontSize:12}}>{teamName(r.franchise)}</td>
+                          <td style={{fontSize:12}}>{historicalName(r.franchise, r.season)}</td>
                           <td className="num">{r.games}</td><td className="num win">{r.wins}</td>
                           <td className="num">{r.win_pct!=null?Number(r.win_pct).toFixed(1)+'%':'—'}</td>
                           <td className="num blue">{r.pts_avg?.toFixed(1)}</td>

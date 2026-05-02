@@ -32,6 +32,7 @@ function aggregateSeasons(seasons: PlayerSeasonStats[]): CareerRow[] {
       first_season: Math.min(...ss.map(s => s.season)),
       last_season: Math.max(...ss.map(s => s.season)),
       deepest_round: Math.max(...ss.map(s => s.deepest_round??0)),
+      // Keep championships/finals from only this franchise's seasons
       finals_appearances: ss.filter(s => s.finals_appearance).length,
       championships: ss.filter(s => s.won_championship).length,
     } as CareerRow
@@ -77,6 +78,7 @@ export default function AggregatePage() {
   const [page, setPage]           = useState(0)
   const [loading, setLoading]     = useState(false)
   const [modal, setModal]         = useState<string|null>(null)
+  const [showFilters, setShowFilters] = useState(false)
   const debRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const hasAdvancedFilters = franchise !== '' || seasonMin !== 1947 || seasonMax !== 2026
@@ -151,30 +153,37 @@ export default function AggregatePage() {
   return (
     <div style={{display:'flex',flexDirection:'column',height:'calc(100vh - 54px)',overflow:'hidden'}}>
       <div style={{padding:'12px 20px',borderBottom:'1px solid var(--border)',background:'var(--surface)',display:'flex',alignItems:'center',gap:12,flexShrink:0,flexWrap:'wrap'}}>
+        <button className="btn" style={{fontSize:12,padding:'5px 10px'}} onClick={()=>setShowFilters(f=>!f)}>
+          {showFilters?'✕ Hide filters':'⊞ Filters'}
+        </button>
         <span style={{fontFamily:'var(--font-head)',fontSize:20,color:'var(--blue)'}}>Career Leaders</span>
-        <input type="search" placeholder="Search player…" value={search} onChange={e=>setSearch(e.target.value)} style={{width:180}}/>
-        <select value={franchise} onChange={e=>setFranchise(e.target.value)} style={{width:180}}>
-          <option value="">All franchises</option>
-          <optgroup label="Active Franchises">
-            {ACTIVE_FRANCHISES.map(f=><option key={f.abbr} value={f.abbr}>{f.name}</option>)}
-          </optgroup>
-          <optgroup label="── Defunct ──">
-            {DEFUNCT_FRANCHISES.map(f=><option key={f.abbr} value={f.abbr}>{f.name}</option>)}
-          </optgroup>
-        </select>
-        <div style={{display:'flex',alignItems:'center',gap:4}}>
-          <label style={{fontSize:12,color:'var(--text2)',whiteSpace:'nowrap'}}>Seasons</label>
-          <input type="number" value={seasonMin} min={1947} max={2026} onChange={e=>setSeasonMin(Number(e.target.value))} style={{width:68}}/>
-          <span style={{fontSize:12,color:'var(--text3)'}}>–</span>
-          <input type="number" value={seasonMax} min={1947} max={2026} onChange={e=>setSeasonMax(Number(e.target.value))} style={{width:68}}/>
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:6}}>
-          <label style={{fontSize:12,color:'var(--text2)',whiteSpace:'nowrap'}}>Min G</label>
-          <input type="number" placeholder="—" value={minGames} min={1} onChange={e=>setMinGames(e.target.value)} style={{width:64}}/>
-        </div>
+        <input type="search" placeholder="Search player…" value={search} onChange={e=>setSearch(e.target.value)} style={{width:160,fontSize:12,padding:'5px 8px'}}/>
+        {showFilters&&(
+          <>
+            <select value={franchise} onChange={e=>setFranchise(e.target.value)} style={{width:180}}>
+              <option value="">All franchises</option>
+              <optgroup label="Active Franchises">
+                {ACTIVE_FRANCHISES.map(f=><option key={f.abbr} value={f.abbr}>{f.name}</option>)}
+              </optgroup>
+              <optgroup label="── Defunct ──">
+                {DEFUNCT_FRANCHISES.map(f=><option key={f.abbr} value={f.abbr}>{f.name}</option>)}
+              </optgroup>
+            </select>
+            <div style={{display:'flex',alignItems:'center',gap:4}}>
+              <label style={{fontSize:12,color:'var(--text2)',whiteSpace:'nowrap'}}>Seasons</label>
+              <input type="number" value={seasonMin} min={1947} max={2026} onChange={e=>setSeasonMin(Number(e.target.value))} style={{width:64}}/>
+              <span style={{fontSize:12,color:'var(--text3)'}}>–</span>
+              <input type="number" value={seasonMax} min={1947} max={2026} onChange={e=>setSeasonMax(Number(e.target.value))} style={{width:64}}/>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <label style={{fontSize:12,color:'var(--text2)',whiteSpace:'nowrap'}}>Min G</label>
+              <input type="number" placeholder="—" value={minGames} min={1} onChange={e=>setMinGames(e.target.value)} style={{width:60}}/>
+            </div>
+          </>
+        )}
         {hasAdvancedFilters && (
           <span style={{fontSize:11,color:'var(--blue)',background:'var(--blue-dim)',padding:'3px 8px',borderRadius:3,border:'1px solid rgba(29,52,97,.2)'}}>
-            Filtered — aggregating selected seasons
+            Filtered
           </span>
         )}
         <span style={{marginLeft:'auto',fontSize:13,color:'var(--text2)'}}>{loading?'Loading…':`${total.toLocaleString()} players`}</span>

@@ -152,6 +152,7 @@ export default function GoatPage() {
   const [dataLoaded, setDataLoaded] = useState(false)
   const [loadingData, setLoadingData] = useState(false)
   const [modal, setModal]     = useState<string|null>(null)
+  const [showControls, setShowControls] = useState(true)
   const [careerMeta, setCareerMeta] = useState<Map<string,{championships:number;finals_appearances:number}>>(new Map())
   const [lbPage, setLbPage]   = useState(0)
   const [gmPage, setGmPage]   = useState(0)
@@ -261,7 +262,7 @@ export default function GoatPage() {
   return (
     <div style={{display:'flex',height:'calc(100vh - 52px)',overflow:'hidden'}}>
       {/* ── Controls sidebar ── */}
-      <aside style={{width:260,flexShrink:0,background:'var(--bg2)',borderRight:'1px solid var(--border)',overflowY:'auto',padding:16,display:'flex',flexDirection:'column',gap:14}}>
+      {showControls&&<aside style={{width:260,flexShrink:0,background:'var(--bg2)',borderRight:'1px solid var(--border)',overflowY:'auto',padding:16,display:'flex',flexDirection:'column',gap:14}}>
         <div style={{fontFamily:'var(--font-head)',fontSize:18,color:'var(--blue)'}}>GOAT CONTROLS</div>
 
         {/* Presets */}
@@ -352,10 +353,15 @@ export default function GoatPage() {
             {goatData.length.toLocaleString()} games loaded
           </div>
         )}
-      </aside>
+      </aside>}
 
       {/* ── Main content ── */}
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{display:'flex',alignItems:'center',padding:'8px 12px 0',borderBottom:'none',gap:8}}>
+          <button className="btn" style={{fontSize:12,padding:'5px 10px',marginBottom:8}} onClick={()=>setShowControls(s=>!s)}>
+            {showControls?'◀ Hide controls':'▶ Show controls'}
+          </button>
+        </div>
         <div className="tab-bar" style={{flexShrink:0,paddingLeft:16}}>
           {([['leaderboard','Career Rankings'],['allgames','All Games'],['heatmap','Heat Map'],['methodology','Methodology']] as [string,string][]).map(([k,l])=>(
             <button key={k} className={`tab${tab===k?' active':''}`} onClick={()=>setTab(k as typeof tab)}>{l}</button>
