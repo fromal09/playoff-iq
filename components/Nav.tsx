@@ -4,66 +4,65 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 
 const TABS = [
-  { href:'/database',  label:'Games',      icon:'📋' },
-  { href:'/aggregate', label:'Careers',    icon:'👤' },
-  { href:'/goat',      label:'GOAT Index', icon:'🏆' },
-  { href:'/admin',     label:'Admin',      icon:'⚙️' },
+  { href:'/database',  label:'Games'      },
+  { href:'/aggregate', label:'Careers'    },
+  { href:'/goat',      label:'GOAT Index' },
+  { href:'/admin',     label:'Admin'      },
 ]
 
-function SealMark({ size = 54 }: { size?: number }) {
-  return (
-    <img
-      src="/logo.jpg"
-      alt="Playoff IQ seal"
-      width={size}
-      height={size}
-      style={{
-        borderRadius: '50%',
-        flexShrink: 0,
-        display: 'block',
-        objectFit: 'cover',
-      }}
-    />
-  )
-}
+const MOBILE_TABS = [
+  { href:'/database',  label:'Games',      icon:'📋' },
+  { href:'/aggregate', label:'Careers',    icon:'👤' },
+  { href:'/goat',      label:'GOAT',       icon:'🏆' },
+]
 
 export default function Nav() {
   const path = usePathname()
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [open, setOpen] = useState(false)
 
   return (
     <>
-      {/* ── Desktop nav ── */}
-      <nav style={{
-        background:'var(--blue)', height:72, display:'flex', alignItems:'center',
-        padding:'0 28px', position:'sticky', top:0, zIndex:50,
-        boxShadow:'0 2px 14px rgba(26,22,18,.22)', flexWrap:'nowrap',
-      }} className="desktop-only">
+      <style>{`
+        .piq-desk { display:flex; }
+        .piq-mob  { display:none; }
+        .piq-bar  { display:none; }
+        @media (max-width:768px){
+          .piq-desk { display:none !important; }
+          .piq-mob  { display:flex !important; }
+          .piq-bar  { display:flex !important; }
+        }
+      `}</style>
 
-        {/* Logo + wordmark */}
-        <Link href="/database" style={{display:'flex',alignItems:'center',gap:11,textDecoration:'none',flexShrink:0,marginRight:40}}>
-          <SealMark size={54}/>
-          <div style={{display:'flex',flexDirection:'column',gap:2}}>
-            <span style={{fontFamily:'var(--font-head)',fontSize:21,fontWeight:700,color:'#fff',letterSpacing:'-0.01em',lineHeight:1,whiteSpace:'nowrap'}}>
+      {/* ── Desktop ── */}
+      <nav className="piq-desk" style={{
+        background:'var(--blue)', height:72, alignItems:'center',
+        padding:'0 24px', position:'sticky', top:0, zIndex:50,
+        boxShadow:'0 2px 14px rgba(26,22,18,.22)',
+      }}>
+        <Link href="/database" style={{display:'flex',alignItems:'center',gap:12,textDecoration:'none',flexShrink:0,marginRight:32}}>
+          <img src="/logo.jpg" alt="Playoff IQ" width={54} height={54}
+            style={{borderRadius:'50%',display:'block',objectFit:'cover',border:'2px solid rgba(196,168,74,0.5)'}}/>
+          <div>
+            <div style={{fontFamily:'var(--font-head)',fontSize:21,fontWeight:700,color:'#fff',letterSpacing:'-0.01em',lineHeight:1}}>
               Playoff IQ
-            </span>
-            <span style={{fontFamily:'var(--font-body)',fontSize:9,color:'rgba(255,255,255,0.38)',letterSpacing:'0.13em',textTransform:'uppercase',lineHeight:1,whiteSpace:'nowrap'}}>
+            </div>
+            <div style={{fontFamily:'var(--font-body)',fontSize:9,color:'rgba(255,255,255,0.4)',letterSpacing:'0.13em',textTransform:'uppercase',marginTop:3}}>
               NBA · 1947–Present
-            </span>
+            </div>
           </div>
         </Link>
 
-        {/* Tabs — spread evenly across remaining space */}
-        <div style={{display:'flex',flex:1,height:'100%',justifyContent:'flex-end'}}>
-          {TABS.map(t=>{
-            const active=path.startsWith(t.href)
-            return(
+        <div style={{display:'flex',flex:1,height:'100%',alignItems:'stretch',justifyContent:'flex-end'}}>
+          {TABS.map(t => {
+            const active = path.startsWith(t.href)
+            return (
               <Link key={t.href} href={t.href} style={{
-                display:'flex', alignItems:'center', padding:'0 22px',
+                display:'flex', alignItems:'center', padding:'0 20px',
                 fontSize:13.5, fontWeight:active?600:400,
-                color:active?'#fff':'rgba(255,255,255,0.62)',
-                borderBottom:active?'2px solid rgba(255,255,255,0.88)':'2px solid transparent',
-                transition:'color .15s', whiteSpace:'nowrap', letterSpacing:'0.01em',
+                color:active?'#fff':'rgba(255,255,255,0.65)',
+                borderBottom:active?'2px solid rgba(255,255,255,0.9)':'2px solid transparent',
+                whiteSpace:'nowrap', letterSpacing:'0.01em',
+                transition:'color .15s',
               }}>
                 {t.label}
               </Link>
@@ -73,33 +72,40 @@ export default function Nav() {
       </nav>
 
       {/* ── Mobile top bar ── */}
-      <nav style={{
-        background:'var(--blue)', display:'none', alignItems:'center', height:52,
+      <nav className="piq-mob" style={{
+        background:'var(--blue)', height:52, alignItems:'center',
         padding:'0 14px', position:'sticky', top:0, zIndex:50,
         boxShadow:'0 2px 8px rgba(26,22,18,.2)',
-      }} className="mobile-only">
-        <Link href="/database" style={{display:'flex',alignItems:'center',gap:8,textDecoration:'none',flex:1}}>
-          <SealMark size={38}/>
+      }}>
+        <Link href="/database" style={{display:'flex',alignItems:'center',gap:9,textDecoration:'none',flex:1}}>
+          <img src="/logo.jpg" alt="Playoff IQ" width={36} height={36}
+            style={{borderRadius:'50%',display:'block',objectFit:'cover',border:'1.5px solid rgba(196,168,74,0.5)'}}/>
           <span style={{fontFamily:'var(--font-head)',fontSize:18,fontWeight:700,color:'#fff',letterSpacing:'-0.01em'}}>
             Playoff IQ
           </span>
         </Link>
-        <button onClick={()=>setMenuOpen(o=>!o)}
+        <button onClick={()=>setOpen(o=>!o)}
           style={{background:'none',border:'none',color:'#fff',fontSize:20,cursor:'pointer',padding:'6px 8px',lineHeight:1}}>
-          {menuOpen?'✕':'☰'}
+          {open?'✕':'☰'}
         </button>
       </nav>
 
       {/* Mobile dropdown */}
-      {menuOpen&&(
-        <div style={{position:'fixed',top:52,left:0,right:0,zIndex:49,background:'var(--blue)',borderBottom:'1px solid rgba(255,255,255,0.1)',boxShadow:'0 4px 12px rgba(26,22,18,.25)'}}>
-          {TABS.map(t=>{
-            const active=path.startsWith(t.href)
-            return(
-              <Link key={t.href} href={t.href} onClick={()=>setMenuOpen(false)}
-                style={{display:'flex',alignItems:'center',gap:12,padding:'13px 18px',fontSize:14,fontWeight:active?600:400,color:active?'#fff':'rgba(255,255,255,0.75)',borderBottom:'1px solid rgba(255,255,255,0.07)',textDecoration:'none',background:active?'rgba(255,255,255,0.08)':'none'}}>
-                <span>{t.icon}</span><span>{t.label}</span>
-                {active&&<span style={{marginLeft:'auto',fontSize:11,color:'rgba(255,255,255,0.4)'}}>●</span>}
+      {open && (
+        <div style={{position:'fixed',top:52,left:0,right:0,zIndex:49,background:'var(--blue)',
+          borderBottom:'1px solid rgba(255,255,255,0.1)',boxShadow:'0 4px 12px rgba(26,22,18,.25)'}}>
+          {TABS.map(t => {
+            const active = path.startsWith(t.href)
+            return (
+              <Link key={t.href} href={t.href} onClick={()=>setOpen(false)} style={{
+                display:'flex', alignItems:'center', padding:'14px 18px',
+                fontSize:14, fontWeight:active?600:400,
+                color:active?'#fff':'rgba(255,255,255,0.75)',
+                borderBottom:'1px solid rgba(255,255,255,0.07)',
+                textDecoration:'none', background:active?'rgba(255,255,255,0.08)':'none',
+              }}>
+                {t.label}
+                {active && <span style={{marginLeft:'auto',fontSize:10,color:'rgba(255,255,255,0.4)'}}>●</span>}
               </Link>
             )
           })}
@@ -107,16 +113,22 @@ export default function Nav() {
       )}
 
       {/* Mobile bottom tab bar */}
-      <div style={{
-        display:'none', position:'fixed', bottom:0, left:0, right:0, zIndex:50,
+      <div className="piq-bar" style={{
+        position:'fixed', bottom:0, left:0, right:0, zIndex:50,
         background:'var(--surface)', borderTop:'1px solid var(--border)',
         boxShadow:'0 -2px 10px rgba(26,22,18,.08)',
         paddingBottom:'env(safe-area-inset-bottom)',
-      }} className="mobile-only">
-        {TABS.filter(t=>t.href!=='/admin').map(t=>{
-          const active=path.startsWith(t.href)
-          return(
-            <Link key={t.href} href={t.href} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',padding:'7px 4px 3px',fontSize:9.5,fontWeight:active?700:400,color:active?'var(--blue)':'var(--text3)',textDecoration:'none',gap:2,textTransform:'uppercase',letterSpacing:'0.04em'}}>
+      }}>
+        {MOBILE_TABS.map(t => {
+          const active = path.startsWith(t.href)
+          return (
+            <Link key={t.href} href={t.href} style={{
+              flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+              padding:'7px 4px 3px', fontSize:9.5, fontWeight:active?700:400,
+              color:active?'var(--blue)':'var(--text3)',
+              textDecoration:'none', gap:2,
+              textTransform:'uppercase', letterSpacing:'0.04em',
+            }}>
               <span style={{fontSize:17,lineHeight:1}}>{t.icon}</span>
               {t.label}
             </Link>
