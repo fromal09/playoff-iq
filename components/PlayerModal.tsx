@@ -398,7 +398,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
 
   return(
     <div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
-      <div className="modal" style={{maxWidth:960}}>
+      <div className="modal" style={{maxWidth:960,borderRadius:'inherit'}}>
         <button className="modal-close" onClick={onClose}>✕</button>
 
         {/* Header */}
@@ -419,7 +419,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
               <div style={{fontSize:11,color:'rgba(255,255,255,0.5)',fontFamily:'var(--font-mono)'}}>{gsAvg} per game</div>
             </div>
           </div>
-          <div style={{display:'flex',gap:0,borderTop:'1px solid rgba(255,255,255,0.12)',paddingTop:14,flexWrap:'wrap',rowGap:10}}>
+          <div style={{display:'flex',gap:0,borderTop:'1px solid rgba(255,255,255,0.12)',paddingTop:12,flexWrap:'wrap',rowGap:8,overflowX:'auto'}}>
             {STAT_ROW.map(([l,v],i,arr)=>(
               <div key={l} style={{paddingRight:14,marginRight:14,borderRight:i<arr.length-1?'1px solid rgba(255,255,255,0.10)':'none'}}>
                 <div style={{fontSize:9,color:'rgba(255,255,255,0.45)',textTransform:'uppercase',letterSpacing:'0.09em',marginBottom:2}}>{l}</div>
@@ -430,7 +430,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
         </div>
 
         {/* Tabs */}
-        <div className="tab-bar" style={{borderRadius:0}}>
+        <div className="tab-bar" style={{borderRadius:0,overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
           {([['overview','Overview'],['radar','Radar'],['seasons','By Season'],['games','Game Log']] as [string,string][]).map(([k,l])=>(
             <button key={k} className={`tab${subTab===k?' active':''}`} onClick={()=>setSubTab(k as typeof subTab)}>{l}</button>
           ))}
@@ -476,7 +476,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
 
                 {/* Career Highlights */}
                 {highlights&&(
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:20}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,marginBottom:20}}>
                     <div className="card2" style={{padding:14}}>
                       <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text3)',marginBottom:8}}>Best Game</div>
                       <div style={{fontSize:22,fontWeight:700,color:'var(--blue)',marginBottom:2,fontFamily:'var(--font-mono)'}}>{highlights.bestGame.gmsc_computed.toFixed(1)}</div>
@@ -538,7 +538,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
 
             {/* RADAR */}
             {subTab==='radar'&&(
-              <div style={{display:'grid',gridTemplateColumns:'300px 1fr',gap:24}}>
+              <div style={{display:'grid',gridTemplateColumns:'minmax(0,300px) 1fr',gap:24}}>
                 <div>
                   <div style={{display:'flex',gap:4,marginBottom:8,flexWrap:'wrap'}}>
                     {Object.entries(PROFILES).map(([k,p])=>(
