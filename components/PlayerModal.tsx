@@ -1,8 +1,9 @@
 'use client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { FRANCHISE_NAMES } from '@/lib/franchise'
-import type { PlayerSeasonStats, PlayerGame } from '@/lib/types'
+import { FRANCHISE_NAMES, FRANCHISE_ROLLUP } from '@/lib/franchise'
+import { PRESETS, buildLeaderboard } from '@/lib/scoring'
+import type { PlayerSeasonStats, PlayerGame, GoatGameRow } from '@/lib/types'
 
 const ALL_STAT_KEYS = ['pts_avg','ast_avg','trb_avg','orb_avg','drb_avg','stl_avg','blk_avg','tov_avg','bpm_avg','fg_pct_avg','three_p_pct_avg','ft_pct_avg','ts_pct_avg']
 const PROFILES: Record<string,{label:string;stats:string[]}> = {
@@ -198,6 +199,8 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
   const [subTab,     setSubTab]     = useState<'overview'|'radar'|'seasons'|'games'>('overview')
   const [gameSort,   setGameSort]   = useState({col:'date',dir:'desc' as 'asc'|'desc'})
   const [loading,    setLoading]    = useState(true)
+  const [allGoatRows, setAllGoatRows] = useState<GoatGameRow[]>([])
+  const [goatLoaded,  setGoatLoaded]  = useState(false)
 
   useEffect(()=>{
     let cancelled=false
@@ -259,10 +262,78 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
       const sorted=[...byPlayer.values()].sort((a,b)=>b-a)
       const rank=sorted.findIndex(v=>Math.abs(v-myGmsc)<0.5)+1
       if(!cancelled) setCareerRank(rank>0?rank:null)
+
+      // Phase 3: load all goat_game_rows for GOAT preset ranks + franchise table
+      const BATCH=1000
+      const goatRows:GoatGameRow[]=[]
+      let gFrom=0
+      while(!cancelled){
+        const promises=Array.from({length:5},(_,i)=>
+          supabase.from('goat_game_rows')
+            .select('player,season,date,team,opp,result,pts,gmsc_computed,round,series_my_wins,series_opp_wins,era')
+            .range(gFrom+i*BATCH, gFrom+(i+1)*BATCH-1)
+        )
+        const results=await Promise.all(promises)
+        let anyData=false
+        for(const {data} of results){
+          if(data?.length){
+            goatRows.push(...(data as GoatGameRow[]))
+            anyData=true
+          }
+        }
+        if(!cancelled) setAllGoatRows([...goatRows])
+        const lastLen=results[results.length-1]?.data?.length??0
+        if(!anyData||lastLen<BATCH) break
+        gFrom+=5*BATCH
+        if(gFrom>100000) break
+      }
+      if(!cancelled) setGoatLoaded(true)
     }
     load()
     return()=>{cancelled=true}
   },[player])
+
+  // GOAT preset ranks across all players
+  const goatRanks = useMemo(()=>{
+    if(!allGoatRows.length) return null
+    const presetKeys:Array<keyof typeof PRESETS> = ['raw','balanced','championship','clutch','prestige']
+    const result:Record<string,number|null>={}
+    for(const key of presetKeys){
+      const p=PRESETS[key]
+      const weights={wT:p.wT,wE:p.wE,wR:p.wR,fB:p.fB,cB:p.cB,maxX:p.maxX,format:p.format}
+      const lb=buildLeaderboard(allGoatRows,weights).sort((a,b)=>b.adjSum-a.adjSum)
+      const rank=lb.findIndex(r=>r.player===player)+1
+      result[key]=rank>0?rank:null
+    }
+    return result
+  },[allGoatRows,player])
+
+  // Per-franchise GOAT ranks
+  const franchiseBreakdown = useMemo(()=>{
+    if(!allGoatRows.length||!seasons.length) return []
+    const franchises=[...new Set(seasons.map(s=>s.franchise))]
+    const presetKeys:Array<keyof typeof PRESETS>=['balanced','championship','clutch','prestige']
+    return franchises.map(fr=>{
+      const frRows=allGoatRows.filter(r=>FRANCHISE_ROLLUP[r.team]===fr)
+      const frSeasons=seasons.filter(s=>s.franchise===fr)
+      const games=frSeasons.reduce((s,r)=>s+(r.games??0),0)
+      const rawGmsc=frSeasons.reduce((s,r)=>s+(r.gmsc_sum??0),0)
+      // Raw rank
+      const rawW={wT:0,wE:0,wR:0,fB:0,cB:0,maxX:0,format:'modern'}
+      const rawLb=buildLeaderboard(frRows,rawW).sort((a,b)=>b.adjSum-a.adjSum)
+      const rawRank=rawLb.findIndex(r=>r.player===player)+1
+      // Preset ranks
+      const presetRanks:Record<string,number|null>={}
+      for(const key of presetKeys){
+        const p=PRESETS[key]
+        const w={wT:p.wT,wE:p.wE,wR:p.wR,fB:p.fB,cB:p.cB,maxX:p.maxX,format:p.format}
+        const lb=buildLeaderboard(frRows,w).sort((a,b)=>b.adjSum-a.adjSum)
+        const rank=lb.findIndex(r=>r.player===player)+1
+        presetRanks[key]=rank>0?rank:null
+      }
+      return{franchise:fr,games,rawGmsc,rawRank:rawRank>0?rawRank:null,presetRanks}
+    }).sort((a,b)=>b.games-a.games)
+  },[allGoatRows,seasons,player])
 
   // Derived
   const totalGames=seasons.reduce((s,r)=>s+(r.games??0),0)||1
@@ -446,7 +517,13 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                 {(allSeasonData.length>0||topThresholds)&&(
                   <div style={{marginBottom:20,display:'grid',gridTemplateColumns:'auto 1fr',gap:'8px 16px',alignItems:'start'}}>
                     {[
-                      ['ALL-TIME CAREER', careerRank?[`#${careerRank} All-Time Career Game Score`]:[]],
+                      ['ALL-TIME CAREER', [
+                        careerRank?`#${careerRank} All-Time Career Game Score`:null,
+                        goatRanks?.balanced?`#${goatRanks.balanced} Balanced GOAT`:null,
+                        goatRanks?.championship?`#${goatRanks.championship} Championship DNA GOAT`:null,
+                        goatRanks?.clutch?`#${goatRanks.clutch} Clutch Moments GOAT`:null,
+                        goatRanks?.prestige?`#${goatRanks.prestige} Finals Prestige GOAT`:null,
+                      ].filter(Boolean) as string[]],
                       ['POSTSEASON MEDALS',[
                         badges.gold>0?`🥇 ${badges.gold}× Gold — led postseason`:null,
                         badges.silver>0?`🥈 ${badges.silver}× Silver`:null,
@@ -471,6 +548,51 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                         ))}
                       </div></>
                     ))}
+                  </div>
+                )}
+
+                {/* Franchise breakdown table */}
+                {franchiseBreakdown.length>0&&(
+                  <div style={{marginBottom:20}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'var(--text3)',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}}>
+                      Franchise Rankings{!goatLoaded&&<span style={{fontWeight:400,color:'var(--text3)',marginLeft:8}}>— loading GOAT data…</span>}
+                    </div>
+                    <div style={{overflowX:'auto',borderRadius:5,border:'1px solid var(--border)'}}>
+                      <table className="data-table" style={{fontSize:12}}>
+                        <thead>
+                          <tr>
+                            <th style={{minWidth:160}}>Franchise</th>
+                            <th className="num">G</th>
+                            <th className="num">Game Score</th>
+                            <th className="num" style={{color:'var(--text2)'}}>Raw Rank</th>
+                            <th className="num" style={{color:'var(--text2)'}}>Balanced</th>
+                            <th className="num" style={{color:'var(--text2)'}}>Champ DNA</th>
+                            <th className="num" style={{color:'var(--text2)'}}>Clutch</th>
+                            <th className="num" style={{color:'var(--text2)'}}>Prestige</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {franchiseBreakdown.map(fr=>(
+                            <tr key={fr.franchise}>
+                              <td style={{fontWeight:500}}>{FRANCHISE_NAMES[fr.franchise]??fr.franchise}</td>
+                              <td className="num" style={{fontFamily:'var(--font-mono)'}}>{fr.games}</td>
+                              <td className="num blue" style={{fontFamily:'var(--font-mono)'}}>{fr.rawGmsc.toFixed(1)}</td>
+                              {goatLoaded?(
+                                <>
+                                  <td className="num" style={{fontFamily:'var(--font-mono)',color:'var(--text2)'}}>{fr.rawRank?`#${fr.rawRank}`:'—'}</td>
+                                  <td className="num" style={{fontFamily:'var(--font-mono)',color:'var(--text2)'}}>{fr.presetRanks['balanced']?`#${fr.presetRanks['balanced']}`:'—'}</td>
+                                  <td className="num" style={{fontFamily:'var(--font-mono)',color:'var(--text2)'}}>{fr.presetRanks['championship']?`#${fr.presetRanks['championship']}`:'—'}</td>
+                                  <td className="num" style={{fontFamily:'var(--font-mono)',color:'var(--text2)'}}>{fr.presetRanks['clutch']?`#${fr.presetRanks['clutch']}`:'—'}</td>
+                                  <td className="num" style={{fontFamily:'var(--font-mono)',color:'var(--text2)'}}>{fr.presetRanks['prestige']?`#${fr.presetRanks['prestige']}`:'—'}</td>
+                                </>
+                              ):(
+                                <td className="num" colSpan={5} style={{color:'var(--text3)',fontStyle:'italic',textAlign:'center'}}>loading…</td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
 
