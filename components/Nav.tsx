@@ -16,35 +16,29 @@ export default function Nav() {
 
   return (
     <>
-      {/* Desktop nav — fixed height, no wrapping */}
+      {/* Desktop nav */}
       <nav style={{
-        background:'var(--blue)', height:50, display:'flex', alignItems:'center',
-        padding:'0 20px', position:'sticky', top:0, zIndex:50, gap:0,
-        boxShadow:'0 2px 10px rgba(26,22,18,.2)', overflow:'hidden',
+        background:'var(--blue)', height:48, display:'flex', alignItems:'center',
+        padding:'0 16px', position:'sticky', top:0, zIndex:50,
+        boxShadow:'0 2px 10px rgba(26,22,18,.2)', flexWrap:'nowrap', minWidth:0,
       }} className="desktop-only">
-        {/* Wordmark */}
         <Link href="/database" style={{
-          display:'flex', alignItems:'baseline', gap:6, marginRight:24,
-          flexShrink:0, textDecoration:'none',
+          fontFamily:'var(--font-head)', fontSize:19, fontWeight:700, color:'#fff',
+          letterSpacing:'-0.01em', lineHeight:1, marginRight:20, flexShrink:0,
+          textDecoration:'none', whiteSpace:'nowrap',
         }}>
-          <span style={{fontFamily:'var(--font-head)',fontSize:20,fontWeight:700,color:'#fff',letterSpacing:'-0.01em',lineHeight:1}}>
-            Playoff IQ
-          </span>
-          <span style={{fontFamily:'var(--font-body)',fontSize:10,fontWeight:400,color:'rgba(255,255,255,0.4)',letterSpacing:'0.10em',textTransform:'uppercase'}}>
-            NBA · 1947–present
-          </span>
+          Playoff IQ
         </Link>
-        {/* Tabs */}
-        <div style={{display:'flex',height:'100%',flexShrink:0}}>
+        <div style={{display:'flex',height:'100%',flexShrink:0,minWidth:0}}>
           {TABS.map(t=>{
             const active=path.startsWith(t.href)
             return(
               <Link key={t.href} href={t.href} style={{
-                display:'flex',alignItems:'center',padding:'0 14px',
-                fontSize:13,fontWeight:active?600:400,
+                display:'flex', alignItems:'center', padding:'0 12px',
+                fontSize:13, fontWeight:active?600:400,
                 color:active?'#fff':'rgba(255,255,255,0.6)',
-                borderBottom:active?'2px solid rgba(255,255,255,0.9)':'2px solid transparent',
-                transition:'color .15s',whiteSpace:'nowrap',
+                borderBottom:active?'2px solid rgba(255,255,255,0.85)':'2px solid transparent',
+                transition:'color .15s', whiteSpace:'nowrap',
               }}>
                 {t.label}
               </Link>
