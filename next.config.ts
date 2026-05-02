@@ -1,7 +1,3 @@
 import type { NextConfig } from 'next'
-const config: NextConfig = {
-  experimental: {
-    instrumentationHook: true,
-  },
-}
+const config: NextConfig = {}
 export default config
