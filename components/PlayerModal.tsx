@@ -1,0 +1,755 @@
+'use client'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { supabase } from '@/lib/supabase'
+import { FRANCHISE_NAMES } from '@/lib/franchise'
+import type { PlayerSeasonStats, PlayerGame } from '@/lib/types'
+
+// ── Constants ──────────────────────────────────────────────────────────────
+const ALL_STAT_KEYS = ['pts_avg','ast_avg','trb_avg','orb_avg','drb_avg','stl_avg','blk_avg','tov_avg','bpm_avg','fg_pct_avg','three_p_pct_avg','ft_pct_avg','ts_pct_avg']
+const PROFILES: Record<string,{label:string;stats:string[]}> = {
+  boxscore:{label:'Box Score',stats:['pts_avg','ast_avg','trb_avg','stl_avg','blk_avg']},
+  scoring:{label:'Scoring',stats:['pts_avg','fg_pct_avg','three_p_pct_avg','ft_pct_avg','ts_pct_avg']},
+  complete:{label:'Complete',stats:['pts_avg','ast_avg','trb_avg','stl_avg','blk_avg','tov_avg','bpm_avg']},
+  choose:{label:'Custom',stats:['pts_avg','ast_avg','trb_avg','stl_avg','blk_avg']},
+}
+const STAT_LABELS:Record<string,string>={
+  pts_avg:'PTS',ast_avg:'AST',trb_avg:'REB',orb_avg:'ORB',drb_avg:'DRB',
+  stl_avg:'STL',blk_avg:'BLK',tov_avg:'TOV',bpm_avg:'BPM',
+  fg_pct_avg:'FG%',three_p_pct_avg:'3P%',ft_pct_avg:'FT%',ts_pct_avg:'TS%',
+}
+const IS_LOWER:Record<string,boolean>={tov_avg:true}
+const IS_PCT:Record<string,boolean>={fg_pct_avg:true,three_p_pct_avg:true,ft_pct_avg:true,ts_pct_avg:true}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+// Returns only full-window points: first point = avg of games 1..N, second = avg of games 2..N+1, etc.
+function rollingAvg(vals:number[],n:number):{idx:number;val:number}[]{
+  if(vals.length<n) return []
+  const result:{idx:number;val:number}[]=[]
+  for(let i=n-1;i<vals.length;i++){
+    const slice=vals.slice(i-n+1,i+1)
+    result.push({idx:i,val:slice.reduce((a,b)=>a+b,0)/n})
+  }
+  return result
+}
+function pctile(arr:number[],p:number):number{
+  const s=[...arr].filter(v=>v!=null&&!isNaN(v)).sort((a,b)=>a-b)
+  return s.length?s[Math.floor(s.length*p)]||0.001:1
+}
+function clamp(v:number,mn:number,mx:number){return Math.max(mn,Math.min(mx,v))}
+function teamName(abbr:string){return FRANCHISE_NAMES[abbr]??abbr}
+function deepestLabel(deepest:number,championships:number):string{
+  if(championships>0) return `${championships}× 🏆 Title`
+  if(deepest===4) return 'Finals'
+  if(deepest===3) return 'Conf Finals'
+  if(deepest===2) return '2nd Round'
+  if(deepest===1) return '1st Round'
+  return '—'
+}
+
+// ── Season Game Score Total Chart ─────────────────────────────────────────
+function SeasonChart({allData,player,playerSeasons}:{
+  allData:{player:string;season:number;gmsc_sum:number}[]
+  player:string
+  playerSeasons:PlayerSeasonStats[]
+}){
+  const [tooltip,setTooltip]=useState<{x:number;y:number;season:number;val:number}|null>(null)
+  const svgRef=useRef<SVGSVGElement>(null)
+  if(!allData.length) return <div className="loading" style={{padding:'30px 0'}}><div className="spinner"/>Loading…</div>
+  const W=640,H=180,PL=52,PR=12,PT=12,PB=28,IW=W-PL-PR,IH=H-PT-PB
+  const seasons=Array.from(new Set(allData.map(d=>d.season))).sort()
+  const minS=seasons[0],maxS=seasons[seasons.length-1]
+  const maxVal=Math.max(...allData.map(d=>d.gmsc_sum),1)
+  const sx=(s:number)=>PL+(s-minS)/(maxS-minS||1)*IW
+  const sy=(v:number)=>PT+IH-clamp(v,0,maxVal)/maxVal*IH
+  const byPlayer=new Map<string,{season:number;gmsc_sum:number}[]>()
+  for(const d of allData){const a=byPlayer.get(d.player)??[];a.push(d);byPlayer.set(d.player,a)}
+  const playerData=playerSeasons.map(s=>({season:s.season,gmsc_sum:s.gmsc_sum??0})).sort((a,b)=>a.season-b.season)
+  const playerPath=playerData.length>=2?playerData.map((d,i)=>`${i===0?'M':'L'}${sx(d.season).toFixed(1)},${sy(d.gmsc_sum).toFixed(1)}`).join(' '):''
+  const decades=[1950,1960,1970,1980,1990,2000,2010,2020].filter(d=>d>=minS&&d<=maxS)
+  const gridLines=[200,400,600,800,1000,1200].filter(v=>v<=maxVal)
+
+  function handleMouseMove(e:React.MouseEvent<SVGSVGElement>){
+    const rect=svgRef.current?.getBoundingClientRect()
+    if(!rect) return
+    const mx=e.clientX-rect.left
+    const relX=mx-PL
+    const season=Math.round(relX/IW*(maxS-minS)+minS)
+    const d=playerData.find(p=>p.season===season)
+    if(d) setTooltip({x:mx,y:sy(d.gmsc_sum),season:d.season,val:d.gmsc_sum})
+    else setTooltip(null)
+  }
+
+  return(
+    <div style={{position:'relative'}}>
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} style={{width:'100%',display:'block',cursor:'crosshair'}}
+        onMouseMove={handleMouseMove} onMouseLeave={()=>setTooltip(null)}>
+        {gridLines.map(v=>(
+          <g key={v}>
+            <line x1={PL} y1={sy(v)} x2={W-PR} y2={sy(v)} stroke="var(--border)" strokeWidth={0.5} strokeDasharray="3,3"/>
+            <text x={PL-4} y={sy(v)+3} textAnchor="end" fontSize={8} fill="var(--text3)">{v}</text>
+          </g>
+        ))}
+        {Array.from(byPlayer.entries()).filter(([p])=>p!==player).map(([p,pts])=>{
+          const sorted=[...pts].sort((a,b)=>a.season-b.season)
+          if(sorted.length<2) return null
+          const path=sorted.map((d,i)=>`${i===0?'M':'L'}${sx(d.season).toFixed(1)},${sy(d.gmsc_sum).toFixed(1)}`).join(' ')
+          return <path key={p} d={path} fill="none" stroke="rgba(100,120,160,0.10)" strokeWidth={0.8}/>
+        })}
+        {playerPath&&<path d={playerPath} fill="none" stroke="var(--blue)" strokeWidth={2.5} strokeLinejoin="round"/>}
+        {playerData.map(d=>(
+          <circle key={d.season} cx={sx(d.season)} cy={sy(d.gmsc_sum)} r={3.5} fill="var(--blue)" stroke="var(--surface)" strokeWidth={1.5}/>
+        ))}
+        {decades.map(d=><text key={d} x={sx(d)} y={H-6} textAnchor="middle" fontSize={8} fill="var(--text3)">{d}</text>)}
+        <line x1={PL} y1={H-PB} x2={W-PR} y2={H-PB} stroke="var(--border)" strokeWidth={1}/>
+        {tooltip&&<line x1={tooltip.x} y1={PT} x2={tooltip.x} y2={H-PB} stroke="var(--blue)" strokeWidth={1} strokeDasharray="3,2" opacity={0.5}/>}
+        {tooltip&&<circle cx={tooltip.x} cy={tooltip.y} r={5} fill="var(--blue)" stroke="var(--surface)" strokeWidth={2}/>}
+      </svg>
+      {tooltip&&(
+        <div style={{position:'absolute',left:tooltip.x+10,top:tooltip.y-32,background:'var(--surface)',border:'1px solid var(--border)',borderRadius:4,padding:'4px 10px',fontSize:12,fontWeight:600,color:'var(--text)',pointerEvents:'none',boxShadow:'var(--shadow2)',whiteSpace:'nowrap'}}>
+          {tooltip.season}: {tooltip.val.toFixed(1)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Game Score Distribution Chart ─────────────────────────────────────────
+function DistributionChart({games}:{games:PlayerGame[]}){
+  const W=640,H=140,PL=32,PR=12,PT=12,PB=24,IW=W-PL-PR,IH=H-PT-PB
+  const BW=2.5
+  const vals=games.map(g=>g.gmsc_computed)
+  if(!vals.length) return null
+  const mean=vals.reduce((a,b)=>a+b,0)/vals.length
+  const minB=Math.floor(Math.min(...vals)/BW)*BW-BW
+  const maxB=Math.ceil(Math.max(...vals)/BW)*BW+BW
+  const buckets:number[]=[]
+  for(let b=minB;b<=maxB;b+=BW) buckets.push(b)
+  const counts=buckets.map(b=>vals.filter(v=>v>=b&&v<b+BW).length)
+  const maxCount=Math.max(...counts,1)
+  const sx=(b:number)=>PL+(b-minB)/(maxB-minB)*IW
+  const sy=(cnt:number)=>PT+IH-cnt/maxCount*IH
+  const barW=IW/(buckets.length)||4
+  const ticks=buckets.filter((_,i)=>i%4===0)
+  return(
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',display:'block'}}>
+      {buckets.map((b,i)=>(
+        <rect key={i} x={sx(b)} y={sy(counts[i])} width={Math.max(barW-1,1)} height={IH-sy(counts[i])+PT}
+          fill={b+BW/2>=mean?'rgba(29,66,138,0.65)':'rgba(200,60,60,0.5)'} rx={1}/>
+      ))}
+      <line x1={PL} y1={H-PB} x2={W-PR} y2={H-PB} stroke="var(--border)" strokeWidth={1}/>
+      {ticks.map(b=>(
+        <text key={b} x={sx(b+BW/2)} y={H-6} textAnchor="middle" fontSize={8} fill="var(--text3)">{b>0?'+':''}{b.toFixed(0)}</text>
+      ))}
+      <line x1={sx(mean)} y1={PT} x2={sx(mean)} y2={H-PB} stroke="var(--text3)" strokeWidth={1} strokeDasharray="2,2"/>
+    </svg>
+  )
+}
+
+// ── Radar Chart ────────────────────────────────────────────────────────────
+function RadarChart({stats,profile,bounds,customStats}:{stats:Record<string,number>;profile:string;bounds:Record<string,number>;customStats?:string[]}){
+  const axes=profile==='choose'?(customStats??PROFILES.boxscore.stats):(PROFILES[profile]?.stats??PROFILES.boxscore.stats)
+  const n=axes.length,R=85,cx=120,cy=120
+  function angle(i:number){return(Math.PI*2*i/n)-Math.PI/2}
+  function pt(i:number,r:number){return{x:cx+r*Math.cos(angle(i)),y:cy+r*Math.sin(angle(i))}}
+  const ratios=axes.map(k=>{
+    const v=stats[k]??0,mx=bounds[k]??1
+    return IS_LOWER[k]?Math.max(0,Math.min(1,1-v/mx)):Math.max(0,Math.min(1,v/mx))
+  })
+  const poly=ratios.map((r,i)=>{const p=pt(i,r*R);return`${p.x},${p.y}`}).join(' ')
+  return(
+    <svg viewBox="0 0 240 240" style={{width:'100%',maxWidth:260}}>
+      {[0.25,0.5,0.75,1].map(lvl=>(
+        <polygon key={lvl} points={axes.map((_,i)=>pt(i,lvl*R)).map(p=>`${p.x},${p.y}`).join(' ')}
+          fill="none" stroke={lvl===1?'var(--border2)':'var(--border)'} strokeWidth={lvl===1?1.5:1} strokeDasharray={lvl===1?undefined:'3,3'}/>
+      ))}
+      {axes.map((_,i)=>{const p=pt(i,R);return<line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="var(--border)" strokeWidth={1}/>})}
+      <polygon points={poly} fill="rgba(29,66,138,0.15)" stroke="var(--blue)" strokeWidth={2} strokeLinejoin="round"/>
+      {ratios.map((r,i)=>{const p=pt(i,r*R);return<circle key={i} cx={p.x} cy={p.y} r={4} fill="var(--blue)" stroke="var(--surface)" strokeWidth={1.5}/>})}
+      {axes.map((k,i)=>{
+        const p=pt(i,R+22),v=stats[k]??0,disp=IS_PCT[k]?(v*100).toFixed(1)+'%':v.toFixed(1)
+        return(
+          <g key={k}>
+            <text x={p.x} y={p.y-4} textAnchor="middle" fontSize={9} fontWeight={700} fill="var(--text)" fontFamily="var(--font-body)">{STAT_LABELS[k]}</text>
+            <text x={p.x} y={p.y+9} textAnchor="middle" fontSize={8} fill="var(--blue)" fontFamily="var(--font-body)">{disp}</text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+function PctBar({label,value,p,isPct}:{label:string;value:number;p:number;isPct?:boolean}){
+  return(
+    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+      <span style={{width:36,fontSize:12,fontWeight:600,color:'var(--text)',flexShrink:0}}>{label}</span>
+      <div className="pct-bar-track"><div className="pct-bar-fill" style={{width:`${p}%`}}/></div>
+      <span style={{fontSize:11,fontWeight:700,color:'var(--blue)',width:30,textAlign:'right'}}>{p}th</span>
+      <span style={{fontSize:11,color:'var(--text2)',width:44,textAlign:'right'}}>{isPct?(value*100).toFixed(1)+'%':value.toFixed(1)}</span>
+    </div>
+  )
+}
+
+// ── Main Modal ─────────────────────────────────────────────────────────────
+export default function PlayerModal({player,onClose}:{player:string;onClose:()=>void}){
+  const [seasons,    setSeasons]    = useState<PlayerSeasonStats[]>([])
+  const [games,      setGames]      = useState<PlayerGame[]>([])
+  const [dists,      setDists]      = useState<Record<string,number[]>>({})
+  const [distsTotal, setDistsTotal] = useState<Record<string,number[]>>({})
+  const [careerRank, setCareerRank] = useState<number|null>(null)
+  const [gmscSum,    setGmscSum]    = useState<number>(0)
+  const [topThresholds, setTopThresholds] = useState<{t10:number;t100:number;t500:number;t1k:number}|null>(null)
+  const [allSeasonData, setAllSeasonData] = useState<{player:string;season:number;gmsc_sum:number}[]>([])
+  const [profile,    setProfile]    = useState('boxscore')
+  const [radarMode,  setRadarMode]  = useState<'career'|'totals'|'best'>('career')
+  const [customStats,setCustomStats]= useState<string[]>(['pts_avg','ast_avg','trb_avg','stl_avg','blk_avg'])
+  const [subTab,     setSubTab]     = useState<'overview'|'radar'|'seasons'|'games'>('overview')
+  const [gameSort,   setGameSort]   = useState({col:'date',dir:'desc' as 'asc'|'desc'})
+  const [loading,    setLoading]    = useState(true)
+
+  useEffect(()=>{
+    let cancelled=false
+    async function load(){
+      setLoading(true)
+      // Phase 1: immediate — player data + rank + percentile dists + game thresholds
+      const [s,g,dRes,rankRes,threshRes]=await Promise.all([
+        supabase.from('player_season_stats').select('*').eq('player',player).order('season'),
+        supabase.from('player_games').select('*').eq('player',player).order('date',{ascending:true}).limit(500),
+        supabase.from('player_career_stats').select('pts_avg,ast_avg,trb_avg,stl_avg,blk_avg,tov_avg,fg_pct,three_p_pct,ft_pct,ts_pct,bpm_avg,pts_total,ast_total,trb_total,stl_total,blk_total,games').gte('games',10).limit(5000),
+        supabase.from('player_career_stats').select('gmsc_sum').eq('player',player).single(),
+        supabase.from('player_games').select('gmsc_computed').order('gmsc_computed',{ascending:false}).limit(1001),
+      ])
+      if(cancelled) return
+      setSeasons((s.data as PlayerSeasonStats[])??[])
+      setGames((g.data as PlayerGame[])??[])
+      const myGmsc=(rankRes.data as {gmsc_sum:number}|null)?.gmsc_sum??0
+      setGmscSum(myGmsc)
+      // Percentile distributions
+      const ds:Record<string,number[]>={}
+      const dsT:Record<string,number[]>={}
+      if(dRes.data){
+        const rows=dRes.data as Record<string,number>[]
+        const remaps:Record<string,string>={fg_pct:'fg_pct_avg',three_p_pct:'three_p_pct_avg',ft_pct:'ft_pct_avg',ts_pct:'ts_pct_avg'}
+        // Per-game career averages (for Career Avg mode)
+        const perGameKeys=['pts_avg','ast_avg','trb_avg','stl_avg','blk_avg','tov_avg','bpm_avg','fg_pct','three_p_pct','ft_pct','ts_pct']
+        for(const k of perGameKeys){
+          const mapped=remaps[k]??k
+          const vals=rows.map(r=>r[k]).filter(v=>v!=null&&!isNaN(Number(v)))
+          if(vals.length>0) ds[mapped]=vals
+        }
+        // Career totals (for Totals mode)
+        const totalKeys=['pts_total','ast_total','trb_total','stl_total','blk_total']
+        for(const k of totalKeys){
+          const vals=rows.map(r=>r[k]).filter(v=>v!=null&&!isNaN(Number(v)))
+          if(vals.length>0) dsT[k]=vals
+        }
+        // Pct stats same as per-game for totals (can't meaningfully total them)
+        dsT['fg_pct_avg']=ds['fg_pct_avg']
+        dsT['three_p_pct_avg']=ds['three_p_pct_avg']
+        dsT['ft_pct_avg']=ds['ft_pct_avg']
+        dsT['ts_pct_avg']=ds['ts_pct_avg']
+      }
+      setDists(ds)
+      setDistsTotal(dsT)
+      // Game score thresholds for badges
+      if(threshRes.data){
+        const sorted=(threshRes.data as {gmsc_computed:number}[]).map(r=>r.gmsc_computed).sort((a,b)=>b-a)
+        setTopThresholds({t10:sorted[9]??0,t100:sorted[99]??0,t500:sorted[499]??0,t1k:sorted[999]??0})
+      }
+      setLoading(false)
+      // Phase 2: background — all season data for spaghetti + badges
+      const allSeas:{player:string;season:number;gmsc_sum:number}[]=[]
+      let from=0
+      while(!cancelled){
+        const {data}=await supabase.from('player_season_stats').select('player,season,gmsc_sum').range(from,from+999)
+        if(!data||data.length===0) break
+        allSeas.push(...(data as {player:string;season:number;gmsc_sum:number}[]))
+        if(data.length<1000) break
+        from+=1000
+        if(from>60000) break
+      }
+      if(cancelled) return
+      setAllSeasonData(allSeas)
+      // Compute career rank from season totals
+      const byPlayer=new Map<string,number>()
+      for(const d of allSeas) byPlayer.set(d.player,(byPlayer.get(d.player)??0)+d.gmsc_sum)
+      const sorted=[...byPlayer.values()].sort((a,b)=>b-a)
+      const rank=sorted.findIndex(v=>Math.abs(v-myGmsc)<0.5)+1
+      if(!cancelled) setCareerRank(rank>0?rank:null)
+    }
+    load()
+    return()=>{cancelled=true}
+  },[player])
+
+  // Derived
+  const totalGames=seasons.reduce((s,r)=>s+(r.games??0),0)||1
+  const totalWins=seasons.reduce((s,r)=>s+(r.wins??0),0)
+  const championships=seasons.filter(s=>s.won_championship).length
+  const finalsApp=seasons.filter(s=>s.finals_appearance).length
+  const champSeasons=useMemo(()=>new Set(seasons.filter(s=>s.won_championship).map(s=>s.season)),[seasons])
+  const finalsSeasons=useMemo(()=>new Set(seasons.filter(s=>s.finals_appearance).map(s=>s.season)),[seasons])
+  const deepest=Math.max(...seasons.map(r=>r.deepest_round??0),0)
+
+  const ca=(k:string)=>seasons.reduce((s,r)=>s+((r as Record<string,number>)[k]??0)*(r.games??0),0)/totalGames
+  const career:Record<string,number>={
+    pts_avg:ca('pts_avg'),ast_avg:ca('ast_avg'),trb_avg:ca('trb_avg'),
+    stl_avg:ca('stl_avg'),blk_avg:ca('blk_avg'),tov_avg:ca('tov_avg'),bpm_avg:ca('bpm_avg'),
+    fg_pct_avg:ca('fg_pct_avg'),three_p_pct_avg:ca('three_p_pct_avg'),
+    ft_pct_avg:ca('ft_pct_avg'),ts_pct_avg:ca('ts_pct_avg'),
+  }
+
+  const bestSeason=seasons.reduce((b,s)=>!b||(s.gmsc_avg??0)>(b.gmsc_avg??0)?s:b,null as PlayerSeasonStats|null)
+  const bestStats:Record<string,number>=bestSeason?{
+    pts_avg:bestSeason.pts_avg,ast_avg:bestSeason.ast_avg,trb_avg:bestSeason.trb_avg,
+    stl_avg:bestSeason.stl_avg,blk_avg:bestSeason.blk_avg,tov_avg:bestSeason.tov_avg,
+    bpm_avg:bestSeason.bpm_avg??0,fg_pct_avg:bestSeason.fg_pct_avg,
+    three_p_pct_avg:bestSeason.three_p_pct_avg,ft_pct_avg:bestSeason.ft_pct_avg,ts_pct_avg:bestSeason.ts_pct_avg,
+  }:career
+
+  // Career totals — percentage stats stay as averages (can't sum them meaningfully)
+  const careerTotals:Record<string,number>={
+    pts_avg:seasons.reduce((s,r)=>s+(r.pts_total??0),0),
+    ast_avg:seasons.reduce((s,r)=>s+(r.ast_total??0),0),
+    trb_avg:seasons.reduce((s,r)=>s+(r.trb_total??0),0),
+    stl_avg:seasons.reduce((s,r)=>s+(r.stl_total??0),0),
+    blk_avg:seasons.reduce((s,r)=>s+(r.blk_total??0),0),
+    tov_avg:0,bpm_avg:0,
+    fg_pct_avg:career.fg_pct_avg,three_p_pct_avg:career.three_p_pct_avg,
+    ft_pct_avg:career.ft_pct_avg,ts_pct_avg:career.ts_pct_avg,
+  }
+
+  const bounds=useMemo(()=>({
+    pts_avg:pctile(dists['pts_avg']??[],0.90),ast_avg:pctile(dists['ast_avg']??[],0.90),
+    trb_avg:pctile(dists['trb_avg']??[],0.90),stl_avg:pctile(dists['stl_avg']??[],0.90),
+    blk_avg:pctile(dists['blk_avg']??[],0.90),tov_avg:pctile(dists['tov_avg']??[],0.90),
+    bpm_avg:pctile(dists['bpm_avg']??[],0.90),fg_pct_avg:pctile(dists['fg_pct_avg']??[],0.90),
+    three_p_pct_avg:pctile(dists['three_p_pct_avg']??[],0.90),ft_pct_avg:pctile(dists['ft_pct_avg']??[],0.90),
+    ts_pct_avg:pctile(dists['ts_pct_avg']??[],0.90),
+  }),[dists])
+
+  // Totals bounds: scale counting stats by games, keep pct stats same as career bounds
+  const totalsBounds=useMemo(()=>({
+    // Counting stats: 90th pctile of actual career totals across all qualified players
+    pts_avg:pctile(distsTotal['pts_total']??[],0.90)||1,
+    ast_avg:pctile(distsTotal['ast_total']??[],0.90)||1,
+    trb_avg:pctile(distsTotal['trb_total']??[],0.90)||1,
+    stl_avg:pctile(distsTotal['stl_total']??[],0.90)||1,
+    blk_avg:pctile(distsTotal['blk_total']??[],0.90)||1,
+    tov_avg:bounds.tov_avg*Math.max(1,totalGames), // no totals dist for TOV
+    bpm_avg:bounds.bpm_avg, // BPM is always per-game
+    fg_pct_avg:bounds.fg_pct_avg,
+    three_p_pct_avg:bounds.three_p_pct_avg,
+    ft_pct_avg:bounds.ft_pct_avg,
+    ts_pct_avg:bounds.ts_pct_avg,
+  }),[bounds,distsTotal,totalGames])
+
+  const radarStats=radarMode==='career'?career:radarMode==='totals'?careerTotals:bestStats
+  const radarBounds=radarMode==='totals'?totalsBounds:bounds
+
+  // pctCalc: compare a value against a distribution
+  function pctCalc(k:string,v:number,distMap:Record<string,number[]>){
+    const all=distMap[k]??[]
+    return all.length?Math.round(all.filter(x=>x<v).length/all.length*100):50
+  }
+
+  // Badges
+  const badges=useMemo(()=>{
+    const bySeason=new Map<number,{player:string;gmsc_sum:number}[]>()
+    for(const d of allSeasonData){const a=bySeason.get(d.season)??[];a.push(d);bySeason.set(d.season,a)}
+    let gold=0,silver=0,bronze=0,top10s=0,top50s=0,top100s=0
+    for(const s of seasons){
+      const pool=(bySeason.get(s.season)??[]).sort((a,b)=>b.gmsc_sum-a.gmsc_sum)
+      const rank=pool.findIndex(p=>p.player===player)+1
+      if(rank===1) gold++; else if(rank===2) silver++; else if(rank===3) bronze++
+      if(rank>=1&&rank<=10) top10s++
+      if(rank>=1&&rank<=50) top50s++
+      if(rank>=1&&rank<=100) top100s++
+    }
+    // Game-level badges using actual DB thresholds
+    let g10=0,g100=0,g500=0,g1k=0
+    if(topThresholds){
+      for(const g of games){
+        const gs=g.gmsc_computed
+        if(gs>=topThresholds.t10) g10++
+        else if(gs>=topThresholds.t100) g100++
+        else if(gs>=topThresholds.t500) g500++
+        else if(gs>=topThresholds.t1k) g1k++
+      }
+    }
+    return{gold,silver,bronze,top10s,top50s,top100s,g10,g100,g500,g1k}
+  },[allSeasonData,seasons,player,games,topThresholds])
+
+  // Highlights
+  const highlights=useMemo(()=>{
+    if(!games.length) return null
+    const bestGame=[...games].sort((a,b)=>b.gmsc_computed-a.gmsc_computed)[0]
+    const bestSeasonRow=seasons.reduce((b,s)=>!b||(s.gmsc_sum??0)>(b.gmsc_sum??0)?s:b,null as PlayerSeasonStats|null)
+    const seriesMap=new Map<string,{g:PlayerGame[];total:number;team:string;opp:string}>()
+    for(const g of games){
+      const k=`${g.season}-R${g.round}`
+      const cur=seriesMap.get(k)??{g:[],total:0,team:g.team,opp:g.opp}
+      cur.g.push(g);cur.total+=g.gmsc_computed
+      seriesMap.set(k,cur)
+    }
+    const bestSeries=[...seriesMap.entries()].sort((a,b)=>b[1].total-a[1].total)[0]
+    return{bestGame,bestSeasonRow,bestSeries}
+  },[games,seasons])
+
+  // Sortable game log
+  const sortedGames=useMemo(()=>[...games].sort((a,b)=>{
+    const av=(a as Record<string,unknown>)[gameSort.col]
+    const bv=(b as Record<string,unknown>)[gameSort.col]
+    if(av==null&&bv==null) return 0; if(av==null) return 1; if(bv==null) return -1
+    if(typeof av==='number'&&typeof bv==='number') return gameSort.dir==='asc'?av-bv:bv-av
+    return gameSort.dir==='asc'?String(av).localeCompare(String(bv)):String(bv).localeCompare(String(av))
+  }),[games,gameSort])
+
+  function GameTh({col,children,right}:{col:string;children:React.ReactNode;right?:boolean}){
+    const active=gameSort.col===col
+    return(
+      <th className="sortable" style={{textAlign:right?'right':'left'}}
+        onClick={()=>setGameSort(gs=>({col,dir:gs.col===col&&gs.dir==='desc'?'asc':'desc'}))}>
+        {children}{active?(gameSort.dir==='desc'?' ↓':' ↑'):''}
+      </th>
+    )
+  }
+
+  const fmtPct=(v:number|null)=>v!=null?(v*100).toFixed(1)+'%':'—'
+  const gsAvg=(seasons.reduce((s,r)=>s+(r.gmsc_avg??0)*(r.games??0),0)/totalGames).toFixed(1)
+  const dlabel=deepestLabel(deepest,championships)
+
+  return(
+    <div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="modal" style={{maxWidth:960}}>
+        <button className="modal-close" onClick={onClose} style={{background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}>✕</button>
+
+        {/* ── HEADER ── */}
+        <div style={{background:'var(--blue)',borderRadius:'10px 10px 0 0',padding:'24px 28px 20px',color:'#fff'}}>
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:16,flexWrap:'wrap',marginBottom:16}}>
+            <div>
+              <h2 style={{fontSize:30,letterSpacing:'0.04em',color:'#fff',marginBottom:8}}>{player}</h2>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                {careerRank&&<span style={{background:'rgba(255,255,255,0.2)',borderRadius:4,padding:'3px 10px',fontSize:12,fontWeight:700,letterSpacing:'0.04em'}}>#{careerRank} All-Time</span>}
+                {championships>0&&<span style={{background:'rgba(255,215,0,0.3)',borderRadius:4,padding:'3px 10px',fontSize:12,fontWeight:700}}>🏆 {championships}× Title</span>}
+                {finalsApp>championships&&<span style={{background:'rgba(255,255,255,0.15)',borderRadius:4,padding:'3px 10px',fontSize:12,fontWeight:600}}>🥈 {finalsApp-championships}× Finals</span>}
+                {seasons.length>0&&<span style={{background:'rgba(255,255,255,0.12)',borderRadius:4,padding:'3px 10px',fontSize:12,color:'rgba(255,255,255,0.8)'}}>{seasons[0].season}–{seasons[seasons.length-1].season}</span>}
+              </div>
+            </div>
+            <div style={{textAlign:'right',flexShrink:0}}>
+              <div style={{fontSize:10,color:'rgba(255,255,255,0.55)',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:1}}>Career Game Score</div>
+              <div style={{fontSize:34,fontWeight:700,color:'#fff',letterSpacing:'-0.02em'}}>{gmscSum.toFixed(1)}</div>
+              <div style={{fontSize:11,color:'rgba(255,255,255,0.55)'}}>{gsAvg} per game</div>
+            </div>
+          </div>
+          {/* Quick stats bar */}
+          <div style={{display:'flex',gap:0,borderTop:'1px solid rgba(255,255,255,0.15)',paddingTop:14,flexWrap:'wrap',rowGap:8}}>
+            {[
+              ['Games',String(totalGames)],
+              ['Wins',String(totalWins)],
+              ['Win%',(totalWins/totalGames*100).toFixed(1)+'%'],
+              ['PTS',career.pts_avg.toFixed(1)],
+              ['AST',career.ast_avg.toFixed(1)],
+              ['REB',career.trb_avg.toFixed(1)],
+              ['STL',career.stl_avg.toFixed(1)],
+              ['BLK',career.blk_avg.toFixed(1)],
+              ['FG%',fmtPct(career.fg_pct_avg)],
+              ['TS%',fmtPct(career.ts_pct_avg)],
+              ['Deepest',dlabel],
+            ].map(([l,v],i,arr)=>(
+              <div key={l} style={{paddingRight:14,marginRight:14,borderRight:i<arr.length-1?'1px solid rgba(255,255,255,0.12)':'none'}}>
+                <div style={{fontSize:10,color:'rgba(255,255,255,0.5)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}}>{l}</div>
+                <div style={{fontSize:15,fontWeight:600,color:'#fff',whiteSpace:'nowrap'}}>{v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── TABS ── */}
+        <div className="tab-bar" style={{margin:0,borderRadius:0}}>
+          {([['overview','Overview'],['radar','Radar'],['seasons','By Season'],['games','Game Log']] as [string,string][]).map(([k,l])=>(
+            <button key={k} className={`tab${subTab===k?' active':''}`} onClick={()=>setSubTab(k as typeof subTab)}>{l}</button>
+          ))}
+        </div>
+
+        {loading?(<div className="loading"><div className="spinner"/>Loading…</div>):(
+          <div style={{padding:'20px 24px',overflowY:'auto',maxHeight:'65vh'}}>
+
+            {/* ── OVERVIEW ── */}
+            {subTab==='overview'&&(
+              <div>
+                {/* Badges */}
+                {(allSeasonData.length>0||topThresholds)&&(
+                  <div style={{marginBottom:20,display:'grid',gridTemplateColumns:'auto 1fr',gap:'8px 16px',alignItems:'start'}}>
+                    {[
+                      ['ALL-TIME CAREER', careerRank?[`#${careerRank} All-Time Career Game Score`]:[]],
+                      ['POSTSEASON MEDALS',[
+                        badges.gold>0?`🥇 ${badges.gold}× Gold — led postseason`:null,
+                        badges.silver>0?`🥈 ${badges.silver}× Silver`:null,
+                        badges.bronze>0?`🥉 ${badges.bronze}× Bronze`:null,
+                      ].filter(Boolean) as string[]],
+                      ['TOP SEASONS',[
+                        badges.top10s>0?`${badges.top10s}× Top-10 Season`:null,
+                        (badges.top50s-badges.top10s)>0?`${badges.top50s-badges.top10s}× Top-50 Season`:null,
+                        (badges.top100s-badges.top50s)>0?`${badges.top100s-badges.top50s}× Top-100 Season`:null,
+                      ].filter(Boolean) as string[]],
+                      ['TOP GAMES',[
+                        badges.g10>0?`${badges.g10}× Top-10 Game`:null,
+                        badges.g100>0?`${badges.g100}× Top-100 Game`:null,
+                        badges.g500>0?`${badges.g500}× Top-500 Game`:null,
+                        badges.g1k>0?`${badges.g1k}× Top-1K Game`:null,
+                      ].filter(Boolean) as string[]],
+                    ].filter(([,items])=>(items as string[]).length>0).map(([label,items])=>(
+                      <>
+                        <div key={label as string} style={{fontSize:10,fontWeight:700,color:'var(--text3)',letterSpacing:'0.07em',textTransform:'uppercase',paddingTop:4,whiteSpace:'nowrap'}}>{label as string}</div>
+                        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                          {(items as string[]).map(item=>(
+                            <span key={item} style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:4,padding:'3px 10px',fontSize:12,fontWeight:500,color:'var(--text)'}}>{item}</span>
+                          ))}
+                        </div>
+                      </>
+                    ))}
+                  </div>
+                )}
+
+                {/* Career Highlights */}
+                {highlights&&(
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:20}}>
+                    <div className="card2" style={{padding:14}}>
+                      <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.07em',textTransform:'uppercase',color:'var(--text3)',marginBottom:8}}>Best Game</div>
+                      <div style={{fontSize:22,fontWeight:700,color:'var(--blue)',marginBottom:4}}>{highlights.bestGame.gmsc_computed.toFixed(1)}</div>
+                      <div style={{fontSize:10,color:'var(--text3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em'}}>Game Score</div>
+                      <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>{highlights.bestGame.date}</div>
+                      <div style={{fontSize:12,color:'var(--text2)',marginBottom:2}}>{teamName(highlights.bestGame.team)} vs {teamName(highlights.bestGame.opp)}</div>
+                      <div style={{fontSize:11,color:'var(--text2)',marginBottom:6}}>Round {highlights.bestGame.round} · {highlights.bestGame.result==='W'?'W':'L'}</div>
+                      <div style={{fontSize:12,color:'var(--text2)'}}>{highlights.bestGame.pts} PTS · {highlights.bestGame.ast} AST · {highlights.bestGame.trb} REB</div>
+                    </div>
+                    {highlights.bestSeasonRow&&(
+                      <div className="card2" style={{padding:14}}>
+                        <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.07em',textTransform:'uppercase',color:'var(--text3)',marginBottom:8}}>Best Postseason</div>
+                        <div style={{fontSize:22,fontWeight:700,color:'var(--blue)',marginBottom:4}}>{highlights.bestSeasonRow.gmsc_sum?.toFixed(1)}</div>
+                        <div style={{fontSize:10,color:'var(--text3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em'}}>Total Game Score</div>
+                        <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>{highlights.bestSeasonRow.season}</div>
+                        <div style={{fontSize:12,color:'var(--text2)',marginBottom:2}}>{teamName(highlights.bestSeasonRow.franchise)}</div>
+                        <div style={{fontSize:11,color:'var(--text2)',marginBottom:6}}>{highlights.bestSeasonRow.games} games · {highlights.bestSeasonRow.gmsc_avg?.toFixed(1)}/game</div>
+                        <div style={{fontSize:12}}>{highlights.bestSeasonRow.won_championship?'🏆 Title':highlights.bestSeasonRow.finals_appearance?'🥈 Finals':''}</div>
+                      </div>
+                    )}
+                    {highlights.bestSeries&&(()=>{
+                      const [key,{g:sg,total,team,opp}]=highlights.bestSeries
+                      const [season,rnd]=key.split('-')
+                      const wins=sg.filter(g=>g.result==='W').length
+                      return(
+                        <div className="card2" style={{padding:14}}>
+                          <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.07em',textTransform:'uppercase',color:'var(--text3)',marginBottom:8}}>Best Series</div>
+                          <div style={{fontSize:22,fontWeight:700,color:'var(--blue)',marginBottom:4}}>{total.toFixed(1)}</div>
+                          <div style={{fontSize:10,color:'var(--text3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em'}}>Total Game Score</div>
+                          <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>{season} · {rnd}</div>
+                          <div style={{fontSize:12,color:'var(--text2)',marginBottom:2}}>{teamName(team)} vs {teamName(opp)}</div>
+                          <div style={{fontSize:11,color:'var(--text2)',marginBottom:6}}>{sg.length} games · {wins}W–{sg.length-wins}L</div>
+                          <div style={{fontSize:12,color:'var(--text2)'}}>{(total/sg.length).toFixed(1)} per game</div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
+
+                {/* Season Game Score Total */}
+                <div className="card" style={{padding:'14px 16px',marginBottom:12}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.07em',textTransform:'uppercase',color:'var(--text2)'}}>Season Game Score Total</div>
+                    <div style={{fontSize:11,color:'var(--text3)'}}>All players in gray — {player} highlighted</div>
+                  </div>
+                  <SeasonChart allData={allSeasonData} player={player} playerSeasons={seasons}/>
+                </div>
+                {/* Game Score Distribution */}
+                <div className="card" style={{padding:'14px 16px',marginBottom:4}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.07em',textTransform:'uppercase',color:'var(--text2)'}}>Game Score Distribution</div>
+                    <div style={{fontSize:11,color:'var(--text3)'}}>{games.length} career playoff games · 2.5pt buckets</div>
+                  </div>
+                  <DistributionChart games={games}/>
+                </div>
+              </div>
+            )}
+
+            {/* ── RADAR ── */}
+            {subTab==='radar'&&(
+              <div style={{display:'grid',gridTemplateColumns:'300px 1fr',gap:24}}>
+                <div>
+                  <div style={{display:'flex',gap:4,marginBottom:8,flexWrap:'wrap'}}>
+                    {Object.entries(PROFILES).map(([k,p])=>(
+                      <button key={k} className={`btn${profile===k?' btn-active':''}`} style={{fontSize:11,padding:'3px 8px'}} onClick={()=>setProfile(k)}>{p.label}</button>
+                    ))}
+                  </div>
+                  {profile==='choose'&&(
+                    <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:8,padding:8,background:'var(--surface2)',borderRadius:6,border:'1px solid var(--border)'}}>
+                      {ALL_STAT_KEYS.map(k=>{
+                        const on=customStats.includes(k)
+                        return(
+                          <button key={k} className={`btn${on?' btn-active':''}`}
+                            style={{fontSize:10,padding:'2px 6px',opacity:!on&&customStats.length>=7?0.4:1}}
+                            onClick={()=>{
+                              if(on) setCustomStats(cs=>cs.filter(s=>s!==k))
+                              else if(customStats.length<7) setCustomStats(cs=>[...cs,k])
+                            }}>
+                            {STAT_LABELS[k]}
+                          </button>
+                        )
+                      })}
+                      <span style={{fontSize:10,color:'var(--text3)',alignSelf:'center',marginLeft:2}}>max 7</span>
+                    </div>
+                  )}
+                  <div style={{display:'flex',gap:4,marginBottom:12}}>
+                    {[['career','Career Avg'],['totals','Career Totals'],['best',`Best (${bestSeason?.season??'—'})`]].map(([m,l])=>(
+                      <button key={m} className={`btn${radarMode===m?' btn-active':''}`}
+                        style={{fontSize:11,flex:1,justifyContent:'center'}} onClick={()=>setRadarMode(m as typeof radarMode)}>{l}</button>
+                    ))}
+                  </div>
+                  <RadarChart stats={radarStats} profile={profile} bounds={radarBounds} customStats={customStats}/>
+                  <div style={{fontSize:10,color:'var(--text3)',textAlign:'center',marginTop:4}}>
+                    {radarMode==='totals'
+                      ?'Outer ring = 90th percentile career totals (10+ games)'
+                      :radarMode==='best'
+                      ?'Outer ring = 90th percentile per-game (10+ games)'
+                      :'Outer ring = 90th percentile per-game (10+ games)'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{marginBottom:12,fontSize:11,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.06em',fontWeight:600}}>
+                    Percentile vs Qualified Players (10+ games)
+                  </div>
+                  {radarMode==='totals'&&(
+                    <div style={{fontSize:10,color:'var(--blue)',background:'var(--blue-dim)',border:'1px solid rgba(29,66,138,.15)',borderRadius:4,padding:'5px 8px',marginBottom:10,lineHeight:1.5}}>
+                      Totals mode — bars show career totals vs. all qualified players
+                    </div>
+                  )}
+                  {radarMode==='best'&&(
+                    <div style={{fontSize:10,color:'var(--text3)',marginBottom:10,lineHeight:1.4}}>
+                      Bars compare {bestSeason?.season??'best'} season per-game stats vs. all qualified player-seasons
+                    </div>
+                  )}
+                  {radarMode==='totals'
+                    ? [['PTS','pts_total'],['AST','ast_total'],['REB','trb_total'],['STL','stl_total'],['BLK','blk_total'],['FG%','fg_pct_avg'],['TS%','ts_pct_avg'],['BPM','bpm_avg']].map(([l,k])=>{
+                        // for counting totals use careerTotals values vs distsTotal; for pct stats use career vs dists
+                        const isTot=['pts_total','ast_total','trb_total','stl_total','blk_total'].includes(k)
+                        const statKey=isTot?k.replace('_total','_avg'):k // radar key
+                        const val=isTot?careerTotals[statKey]??0:career[k]??0
+                        const distMap=isTot?distsTotal:dists
+                        return <PctBar key={k} label={l} value={val} p={pctCalc(k,val,distMap)} isPct={IS_PCT[k]}/>
+                      })
+                    : radarMode==='best'
+                    ? [['PTS','pts_avg'],['AST','ast_avg'],['REB','trb_avg'],['STL','stl_avg'],['BLK','blk_avg'],['FG%','fg_pct_avg'],['TS%','ts_pct_avg'],['BPM','bpm_avg']].map(([l,k])=>(
+                        <PctBar key={k} label={l} value={bestStats[k]??0} p={pctCalc(k,bestStats[k]??0,dists)} isPct={IS_PCT[k]}/>
+                      ))
+                    : [['PTS','pts_avg'],['AST','ast_avg'],['REB','trb_avg'],['STL','stl_avg'],['BLK','blk_avg'],['FG%','fg_pct_avg'],['TS%','ts_pct_avg'],['BPM','bpm_avg']].map(([l,k])=>(
+                        <PctBar key={k} label={l} value={career[k]??0} p={pctCalc(k,career[k]??0,dists)} isPct={IS_PCT[k]}/>
+                      ))
+                  }
+                  <div style={{marginTop:10,fontSize:11,color:'var(--text3)'}}>
+                    Among {(dists['pts_avg']?.length??0).toLocaleString()} qualified players
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── BY SEASON ── */}
+            {subTab==='seasons'&&(
+              <div style={{overflowX:'auto'}}>
+                <table className="data-table">
+                  <thead><tr>
+                    <th></th><th>Season</th><th>Franchise</th>
+                    <th className="num">G</th><th className="num">W</th><th className="num">W%</th>
+                    <th className="num">PTS</th><th className="num">AST</th><th className="num">REB</th>
+                    <th className="num">STL</th><th className="num">BLK</th><th className="num">TOV</th>
+                    <th className="num">FG%</th><th className="num">3P%</th><th className="num">FT%</th>
+                    <th className="num">TS%</th><th className="num">MIN</th>
+                    <th className="num">GS/G</th><th className="num">GS Total</th><th className="num">BPM</th>
+                  </tr></thead>
+                  <tbody>
+                    {seasons.map(r=>{
+                      const isC=champSeasons.has(r.season),isF=finalsSeasons.has(r.season)
+                      return(
+                        <tr key={r.season} style={{background:isC?'rgba(254,243,199,0.5)':undefined}}>
+                          <td style={{fontSize:16,width:28}}>{isC?'🏆':isF?'🥈':''}</td>
+                          <td style={{fontWeight:700,color:isC?'#92400E':'var(--blue)'}}>{r.season}</td>
+                          <td style={{fontSize:12}}>{teamName(r.franchise)}</td>
+                          <td className="num">{r.games}</td>
+                          <td className="num win">{r.wins}</td>
+                          <td className="num">{r.win_pct!=null?Number(r.win_pct).toFixed(1)+'%':'—'}</td>
+                          <td className="num blue">{r.pts_avg?.toFixed(1)}</td>
+                          <td className="num">{r.ast_avg?.toFixed(1)}</td><td className="num">{r.trb_avg?.toFixed(1)}</td>
+                          <td className="num">{r.stl_avg?.toFixed(1)}</td><td className="num">{r.blk_avg?.toFixed(1)}</td>
+                          <td className="num">{r.tov_avg?.toFixed(1)}</td>
+                          <td className="num">{fmtPct(r.fg_pct_avg)}</td><td className="num">{fmtPct(r.three_p_pct_avg)}</td>
+                          <td className="num">{fmtPct(r.ft_pct_avg)}</td><td className="num">{fmtPct(r.ts_pct_avg)}</td>
+                          <td className="num">{r.mp_avg?.toFixed(1)}</td>
+                          <td className="num blue">{r.gmsc_avg?.toFixed(1)}</td>
+                          <td className="num blue">{r.gmsc_sum?.toFixed(1)}</td>
+                          <td className="num">{r.bpm_avg?.toFixed(1)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* ── GAME LOG ── */}
+            {subTab==='games'&&(
+              <div style={{overflowX:'auto'}}>
+                <table className="data-table">
+                  <thead><tr>
+                    <GameTh col="date">Date</GameTh>
+                    <th>Team</th><th>Opp</th>
+                    <GameTh col="result">W/L</GameTh>
+                    <GameTh col="round" right>Rnd</GameTh>
+                    <th>Series</th>
+                    <GameTh col="pts" right>PTS</GameTh>
+                    <GameTh col="ast" right>AST</GameTh>
+                    <GameTh col="trb" right>REB</GameTh>
+                    <GameTh col="stl" right>STL</GameTh>
+                    <GameTh col="blk" right>BLK</GameTh>
+                    <GameTh col="tov" right>TOV</GameTh>
+                    <GameTh col="fg_pct" right>FG%</GameTh>
+                    <GameTh col="three_p" right>3PM</GameTh>
+                    <GameTh col="ts_pct" right>TS%</GameTh>
+                    <GameTh col="mp" right>MIN</GameTh>
+                    <GameTh col="gmsc_computed" right>Game Score</GameTh>
+                    <GameTh col="bpm" right>BPM</GameTh>
+                    <GameTh col="plus_minus" right>+/-</GameTh>
+                  </tr></thead>
+                  <tbody>
+                    {sortedGames.map(g=>{
+                      const isChamp=champSeasons.has(g.season)&&g.result==='W'&&g.series_my_wins===3
+                      return(
+                        <tr key={g.id} style={{background:isChamp?'rgba(254,243,199,0.5)':undefined}}>
+                          <td>{g.date}</td>
+                          <td><span className="tag tag-dim">{g.team}</span></td>
+                          <td style={{color:'var(--text2)'}}>{g.opp}</td>
+                          <td className={g.result==='W'?'win':'loss'}>{g.result}</td>
+                          <td className="num">{g.round}</td>
+                          <td style={{fontSize:11,color:'var(--text2)'}}>G{g.series_my_wins+g.series_opp_wins+1} ({Math.max(g.series_my_wins,g.series_opp_wins)}–{Math.min(g.series_my_wins,g.series_opp_wins)})</td>
+                          <td className="num blue">{g.pts??'—'}</td>
+                          <td className="num">{g.ast??'—'}</td><td className="num">{g.trb??'—'}</td>
+                          <td className="num">{g.stl??'—'}</td><td className="num">{g.blk??'—'}</td>
+                          <td className="num">{g.tov??'—'}</td>
+                          <td className="num">{fmtPct(g.fg_pct)}</td><td className="num">{g.three_p??'—'}</td>
+                          <td className="num">{fmtPct(g.ts_pct)}</td>
+                          <td className="num">{g.mp!=null?Math.round(g.mp):'—'}</td>
+                          <td className="num blue">{g.gmsc_computed.toFixed(1)}</td>
+                          <td className="num">{g.bpm!=null?g.bpm.toFixed(1):'—'}</td>
+                          <td className="num" style={{color:(g.plus_minus??0)>=0?'var(--green)':'var(--red)'}}>
+                            {g.plus_minus!=null?(g.plus_minus>=0?'+':'')+g.plus_minus:'—'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
