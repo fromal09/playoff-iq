@@ -31,7 +31,7 @@ export default function DatabasePage() {
   const [loading, setLoading] = useState(false)
   const [modal,   setModal]   = useState<string|null>(null)
   const [showFilters, setShowFilters] = useState(true)
-  const debRef = useRef<ReturnType<typeof setTimeout>>()
+  const debRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const fetchRows = useCallback(async (f:FilterState, pg:number) => {
     setLoading(true)
@@ -136,8 +136,8 @@ export default function DatabasePage() {
               <div key={lbl} style={{marginBottom:8}}>
                 <label className="filter-label" style={{fontSize:10}}>{lbl}</label>
                 <div className="filter-row">
-                  <input type="number" placeholder="Min" value={(pending as Record<string,string>)[mn]} onChange={e=>setPending(p=>({...p,[mn]:e.target.value}))}/>
-                  <input type="number" placeholder="Max" value={(pending as Record<string,string>)[mx]} onChange={e=>setPending(p=>({...p,[mx]:e.target.value}))}/>
+                  <input type="number" placeholder="Min" value={(pending as unknown as Record<string,string>)[mn]} onChange={e=>setPending(p=>({...p,[mn]:e.target.value}))}/>
+                  <input type="number" placeholder="Max" value={(pending as unknown as Record<string,string>)[mx]} onChange={e=>setPending(p=>({...p,[mx]:e.target.value}))}/>
                 </div>
               </div>
             ))}

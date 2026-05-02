@@ -1,10 +1,9 @@
 'use client'
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { FRANCHISE_NAMES } from '@/lib/franchise'
 import type { PlayerSeasonStats, PlayerGame } from '@/lib/types'
 
-// ── Constants ──────────────────────────────────────────────────────────────
 const ALL_STAT_KEYS = ['pts_avg','ast_avg','trb_avg','orb_avg','drb_avg','stl_avg','blk_avg','tov_avg','bpm_avg','fg_pct_avg','three_p_pct_avg','ft_pct_avg','ts_pct_avg']
 const PROFILES: Record<string,{label:string;stats:string[]}> = {
   boxscore:{label:'Box Score',stats:['pts_avg','ast_avg','trb_avg','stl_avg','blk_avg']},
@@ -20,8 +19,6 @@ const STAT_LABELS:Record<string,string>={
 const IS_LOWER:Record<string,boolean>={tov_avg:true}
 const IS_PCT:Record<string,boolean>={fg_pct_avg:true,three_p_pct_avg:true,ft_pct_avg:true,ts_pct_avg:true}
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-// Returns only full-window points: first point = avg of games 1..N, second = avg of games 2..N+1, etc.
 function rollingAvg(vals:number[],n:number):{idx:number;val:number}[]{
   if(vals.length<n) return []
   const result:{idx:number;val:number}[]=[]
@@ -49,12 +46,11 @@ function deepestLabel(deepest:number,championships:number):string{
 // ── Season Game Score Total Chart ─────────────────────────────────────────
 function SeasonChart({allData,player,playerSeasons}:{
   allData:{player:string;season:number;gmsc_sum:number}[]
-  player:string
-  playerSeasons:PlayerSeasonStats[]
+  player:string; playerSeasons:PlayerSeasonStats[]
 }){
   const [tooltip,setTooltip]=useState<{x:number;y:number;season:number;val:number}|null>(null)
   const svgRef=useRef<SVGSVGElement>(null)
-  if(!allData.length) return <div className="loading" style={{padding:'30px 0'}}><div className="spinner"/>Loading…</div>
+  if(!allData.length) return <div className="loading" style={{padding:'24px 0'}}><div className="spinner"/>Loading chart…</div>
   const W=640,H=180,PL=52,PR=12,PT=12,PB=28,IW=W-PL-PR,IH=H-PT-PB
   const seasons=Array.from(new Set(allData.map(d=>d.season))).sort()
   const minS=seasons[0],maxS=seasons[seasons.length-1]
@@ -67,18 +63,15 @@ function SeasonChart({allData,player,playerSeasons}:{
   const playerPath=playerData.length>=2?playerData.map((d,i)=>`${i===0?'M':'L'}${sx(d.season).toFixed(1)},${sy(d.gmsc_sum).toFixed(1)}`).join(' '):''
   const decades=[1950,1960,1970,1980,1990,2000,2010,2020].filter(d=>d>=minS&&d<=maxS)
   const gridLines=[200,400,600,800,1000,1200].filter(v=>v<=maxVal)
-
   function handleMouseMove(e:React.MouseEvent<SVGSVGElement>){
     const rect=svgRef.current?.getBoundingClientRect()
     if(!rect) return
-    const mx=e.clientX-rect.left
-    const relX=mx-PL
-    const season=Math.round(relX/IW*(maxS-minS)+minS)
+    const mx=(e.clientX-rect.left)*(W/rect.width)
+    const season=Math.round((mx-PL)/IW*(maxS-minS)+minS)
     const d=playerData.find(p=>p.season===season)
-    if(d) setTooltip({x:mx,y:sy(d.gmsc_sum),season:d.season,val:d.gmsc_sum})
+    if(d) setTooltip({x:(e.clientX-rect.left)*(640/rect.width),y:sy(d.gmsc_sum),season:d.season,val:d.gmsc_sum})
     else setTooltip(null)
   }
-
   return(
     <div style={{position:'relative'}}>
       <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} style={{width:'100%',display:'block',cursor:'crosshair'}}
@@ -93,7 +86,7 @@ function SeasonChart({allData,player,playerSeasons}:{
           const sorted=[...pts].sort((a,b)=>a.season-b.season)
           if(sorted.length<2) return null
           const path=sorted.map((d,i)=>`${i===0?'M':'L'}${sx(d.season).toFixed(1)},${sy(d.gmsc_sum).toFixed(1)}`).join(' ')
-          return <path key={p} d={path} fill="none" stroke="rgba(100,120,160,0.10)" strokeWidth={0.8}/>
+          return <path key={p} d={path} fill="none" stroke="rgba(100,90,70,0.09)" strokeWidth={0.8}/>
         })}
         {playerPath&&<path d={playerPath} fill="none" stroke="var(--blue)" strokeWidth={2.5} strokeLinejoin="round"/>}
         {playerData.map(d=>(
@@ -134,7 +127,7 @@ function DistributionChart({games}:{games:PlayerGame[]}){
     <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',display:'block'}}>
       {buckets.map((b,i)=>(
         <rect key={i} x={sx(b)} y={sy(counts[i])} width={Math.max(barW-1,1)} height={IH-sy(counts[i])+PT}
-          fill={b+BW/2>=mean?'rgba(29,66,138,0.65)':'rgba(200,60,60,0.5)'} rx={1}/>
+          fill={b+BW/2>=mean?'rgba(29,52,97,0.65)':'rgba(139,32,32,0.45)'} rx={1}/>
       ))}
       <line x1={PL} y1={H-PB} x2={W-PR} y2={H-PB} stroke="var(--border)" strokeWidth={1}/>
       {ticks.map(b=>(
@@ -163,7 +156,7 @@ function RadarChart({stats,profile,bounds,customStats}:{stats:Record<string,numb
           fill="none" stroke={lvl===1?'var(--border2)':'var(--border)'} strokeWidth={lvl===1?1.5:1} strokeDasharray={lvl===1?undefined:'3,3'}/>
       ))}
       {axes.map((_,i)=>{const p=pt(i,R);return<line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="var(--border)" strokeWidth={1}/>})}
-      <polygon points={poly} fill="rgba(29,66,138,0.15)" stroke="var(--blue)" strokeWidth={2} strokeLinejoin="round"/>
+      <polygon points={poly} fill="rgba(29,52,97,0.13)" stroke="var(--blue)" strokeWidth={2} strokeLinejoin="round"/>
       {ratios.map((r,i)=>{const p=pt(i,r*R);return<circle key={i} cx={p.x} cy={p.y} r={4} fill="var(--blue)" stroke="var(--surface)" strokeWidth={1.5}/>})}
       {axes.map((k,i)=>{
         const p=pt(i,R+22),v=stats[k]??0,disp=IS_PCT[k]?(v*100).toFixed(1)+'%':v.toFixed(1)
@@ -183,8 +176,8 @@ function PctBar({label,value,p,isPct}:{label:string;value:number;p:number;isPct?
     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
       <span style={{width:36,fontSize:12,fontWeight:600,color:'var(--text)',flexShrink:0}}>{label}</span>
       <div className="pct-bar-track"><div className="pct-bar-fill" style={{width:`${p}%`}}/></div>
-      <span style={{fontSize:11,fontWeight:700,color:'var(--blue)',width:30,textAlign:'right'}}>{p}th</span>
-      <span style={{fontSize:11,color:'var(--text2)',width:44,textAlign:'right'}}>{isPct?(value*100).toFixed(1)+'%':value.toFixed(1)}</span>
+      <span style={{fontSize:11,fontWeight:700,color:'var(--blue)',width:30,textAlign:'right',fontFamily:'var(--font-mono)'}}>{p}th</span>
+      <span style={{fontSize:11,color:'var(--text2)',width:46,textAlign:'right',fontFamily:'var(--font-mono)'}}>{isPct?(value*100).toFixed(1)+'%':value.toFixed(1)}</span>
     </div>
   )
 }
@@ -210,7 +203,6 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
     let cancelled=false
     async function load(){
       setLoading(true)
-      // Phase 1: immediate — player data + rank + percentile dists + game thresholds
       const [s,g,dRes,rankRes,threshRes]=await Promise.all([
         supabase.from('player_season_stats').select('*').eq('player',player).order('season'),
         supabase.from('player_games').select('*').eq('player',player).order('date',{ascending:true}).limit(500),
@@ -223,45 +215,38 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
       setGames((g.data as PlayerGame[])??[])
       const myGmsc=(rankRes.data as {gmsc_sum:number}|null)?.gmsc_sum??0
       setGmscSum(myGmsc)
-      // Percentile distributions
-      const ds:Record<string,number[]>={}
-      const dsT:Record<string,number[]>={}
+      // Build dist maps
+      const ds:Record<string,number[]>={}, dsT:Record<string,number[]>={}
       if(dRes.data){
         const rows=dRes.data as Record<string,number>[]
         const remaps:Record<string,string>={fg_pct:'fg_pct_avg',three_p_pct:'three_p_pct_avg',ft_pct:'ft_pct_avg',ts_pct:'ts_pct_avg'}
-        // Per-game career averages (for Career Avg mode)
-        const perGameKeys=['pts_avg','ast_avg','trb_avg','stl_avg','blk_avg','tov_avg','bpm_avg','fg_pct','three_p_pct','ft_pct','ts_pct']
-        for(const k of perGameKeys){
+        for(const k of ['pts_avg','ast_avg','trb_avg','stl_avg','blk_avg','tov_avg','bpm_avg','fg_pct','three_p_pct','ft_pct','ts_pct']){
           const mapped=remaps[k]??k
           const vals=rows.map(r=>r[k]).filter(v=>v!=null&&!isNaN(Number(v)))
-          if(vals.length>0) ds[mapped]=vals
+          if(vals.length) ds[mapped]=vals
         }
-        // Career totals (for Totals mode)
-        const totalKeys=['pts_total','ast_total','trb_total','stl_total','blk_total']
-        for(const k of totalKeys){
+        for(const k of ['pts_total','ast_total','trb_total','stl_total','blk_total']){
           const vals=rows.map(r=>r[k]).filter(v=>v!=null&&!isNaN(Number(v)))
-          if(vals.length>0) dsT[k]=vals
+          if(vals.length) dsT[k]=vals
         }
-        // Pct stats same as per-game for totals (can't meaningfully total them)
         dsT['fg_pct_avg']=ds['fg_pct_avg']
         dsT['three_p_pct_avg']=ds['three_p_pct_avg']
         dsT['ft_pct_avg']=ds['ft_pct_avg']
         dsT['ts_pct_avg']=ds['ts_pct_avg']
       }
-      setDists(ds)
-      setDistsTotal(dsT)
-      // Game score thresholds for badges
+      setDists(ds); setDistsTotal(dsT)
       if(threshRes.data){
         const sorted=(threshRes.data as {gmsc_computed:number}[]).map(r=>r.gmsc_computed).sort((a,b)=>b-a)
         setTopThresholds({t10:sorted[9]??0,t100:sorted[99]??0,t500:sorted[499]??0,t1k:sorted[999]??0})
       }
       setLoading(false)
-      // Phase 2: background — all season data for spaghetti + badges
+      // Phase 2: all season data for spaghetti + badges
+      if(cancelled) return
       const allSeas:{player:string;season:number;gmsc_sum:number}[]=[]
       let from=0
       while(!cancelled){
         const {data}=await supabase.from('player_season_stats').select('player,season,gmsc_sum').range(from,from+999)
-        if(!data||data.length===0) break
+        if(!data||!data.length) break
         allSeas.push(...(data as {player:string;season:number;gmsc_sum:number}[]))
         if(data.length<1000) break
         from+=1000
@@ -269,7 +254,6 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
       }
       if(cancelled) return
       setAllSeasonData(allSeas)
-      // Compute career rank from season totals
       const byPlayer=new Map<string,number>()
       for(const d of allSeas) byPlayer.set(d.player,(byPlayer.get(d.player)??0)+d.gmsc_sum)
       const sorted=[...byPlayer.values()].sort((a,b)=>b-a)
@@ -289,14 +273,13 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
   const finalsSeasons=useMemo(()=>new Set(seasons.filter(s=>s.finals_appearance).map(s=>s.season)),[seasons])
   const deepest=Math.max(...seasons.map(r=>r.deepest_round??0),0)
 
-  const ca=(k:string)=>seasons.reduce((s,r)=>s+((r as Record<string,number>)[k]??0)*(r.games??0),0)/totalGames
+  const ca=(k:string)=>seasons.reduce((s,r)=>s+((r as unknown as Record<string,number>)[k]??0)*(r.games??0),0)/totalGames
   const career:Record<string,number>={
     pts_avg:ca('pts_avg'),ast_avg:ca('ast_avg'),trb_avg:ca('trb_avg'),
     stl_avg:ca('stl_avg'),blk_avg:ca('blk_avg'),tov_avg:ca('tov_avg'),bpm_avg:ca('bpm_avg'),
     fg_pct_avg:ca('fg_pct_avg'),three_p_pct_avg:ca('three_p_pct_avg'),
     ft_pct_avg:ca('ft_pct_avg'),ts_pct_avg:ca('ts_pct_avg'),
   }
-
   const bestSeason=seasons.reduce((b,s)=>!b||(s.gmsc_avg??0)>(b.gmsc_avg??0)?s:b,null as PlayerSeasonStats|null)
   const bestStats:Record<string,number>=bestSeason?{
     pts_avg:bestSeason.pts_avg,ast_avg:bestSeason.ast_avg,trb_avg:bestSeason.trb_avg,
@@ -304,8 +287,6 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
     bpm_avg:bestSeason.bpm_avg??0,fg_pct_avg:bestSeason.fg_pct_avg,
     three_p_pct_avg:bestSeason.three_p_pct_avg,ft_pct_avg:bestSeason.ft_pct_avg,ts_pct_avg:bestSeason.ts_pct_avg,
   }:career
-
-  // Career totals — percentage stats stay as averages (can't sum them meaningfully)
   const careerTotals:Record<string,number>={
     pts_avg:seasons.reduce((s,r)=>s+(r.pts_total??0),0),
     ast_avg:seasons.reduce((s,r)=>s+(r.ast_total??0),0),
@@ -326,32 +307,25 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
     ts_pct_avg:pctile(dists['ts_pct_avg']??[],0.90),
   }),[dists])
 
-  // Totals bounds: scale counting stats by games, keep pct stats same as career bounds
   const totalsBounds=useMemo(()=>({
-    // Counting stats: 90th pctile of actual career totals across all qualified players
     pts_avg:pctile(distsTotal['pts_total']??[],0.90)||1,
     ast_avg:pctile(distsTotal['ast_total']??[],0.90)||1,
     trb_avg:pctile(distsTotal['trb_total']??[],0.90)||1,
     stl_avg:pctile(distsTotal['stl_total']??[],0.90)||1,
     blk_avg:pctile(distsTotal['blk_total']??[],0.90)||1,
-    tov_avg:bounds.tov_avg*Math.max(1,totalGames), // no totals dist for TOV
-    bpm_avg:bounds.bpm_avg, // BPM is always per-game
-    fg_pct_avg:bounds.fg_pct_avg,
-    three_p_pct_avg:bounds.three_p_pct_avg,
-    ft_pct_avg:bounds.ft_pct_avg,
-    ts_pct_avg:bounds.ts_pct_avg,
+    tov_avg:bounds.tov_avg*Math.max(1,totalGames),bpm_avg:bounds.bpm_avg,
+    fg_pct_avg:bounds.fg_pct_avg,three_p_pct_avg:bounds.three_p_pct_avg,
+    ft_pct_avg:bounds.ft_pct_avg,ts_pct_avg:bounds.ts_pct_avg,
   }),[bounds,distsTotal,totalGames])
 
   const radarStats=radarMode==='career'?career:radarMode==='totals'?careerTotals:bestStats
   const radarBounds=radarMode==='totals'?totalsBounds:bounds
 
-  // pctCalc: compare a value against a distribution
   function pctCalc(k:string,v:number,distMap:Record<string,number[]>){
     const all=distMap[k]??[]
     return all.length?Math.round(all.filter(x=>x<v).length/all.length*100):50
   }
 
-  // Badges
   const badges=useMemo(()=>{
     const bySeason=new Map<number,{player:string;gmsc_sum:number}[]>()
     for(const d of allSeasonData){const a=bySeason.get(d.season)??[];a.push(d);bySeason.set(d.season,a)}
@@ -364,7 +338,6 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
       if(rank>=1&&rank<=50) top50s++
       if(rank>=1&&rank<=100) top100s++
     }
-    // Game-level badges using actual DB thresholds
     let g10=0,g100=0,g500=0,g1k=0
     if(topThresholds){
       for(const g of games){
@@ -378,7 +351,6 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
     return{gold,silver,bronze,top10s,top50s,top100s,g10,g100,g500,g1k}
   },[allSeasonData,seasons,player,games,topThresholds])
 
-  // Highlights
   const highlights=useMemo(()=>{
     if(!games.length) return null
     const bestGame=[...games].sort((a,b)=>b.gmsc_computed-a.gmsc_computed)[0]
@@ -387,17 +359,15 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
     for(const g of games){
       const k=`${g.season}-R${g.round}`
       const cur=seriesMap.get(k)??{g:[],total:0,team:g.team,opp:g.opp}
-      cur.g.push(g);cur.total+=g.gmsc_computed
-      seriesMap.set(k,cur)
+      cur.g.push(g);cur.total+=g.gmsc_computed;seriesMap.set(k,cur)
     }
     const bestSeries=[...seriesMap.entries()].sort((a,b)=>b[1].total-a[1].total)[0]
     return{bestGame,bestSeasonRow,bestSeries}
   },[games,seasons])
 
-  // Sortable game log
   const sortedGames=useMemo(()=>[...games].sort((a,b)=>{
-    const av=(a as Record<string,unknown>)[gameSort.col]
-    const bv=(b as Record<string,unknown>)[gameSort.col]
+    const av=(a as unknown as Record<string,unknown>)[gameSort.col]
+    const bv=(b as unknown as Record<string,unknown>)[gameSort.col]
     if(av==null&&bv==null) return 0; if(av==null) return 1; if(bv==null) return -1
     if(typeof av==='number'&&typeof bv==='number') return gameSort.dir==='asc'?av-bv:bv-av
     return gameSort.dir==='asc'?String(av).localeCompare(String(bv)):String(bv).localeCompare(String(av))
@@ -417,63 +387,59 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
   const gsAvg=(seasons.reduce((s,r)=>s+(r.gmsc_avg??0)*(r.games??0),0)/totalGames).toFixed(1)
   const dlabel=deepestLabel(deepest,championships)
 
+  const STAT_ROW=[
+    ['Games',String(totalGames)],['Wins',String(totalWins)],
+    ['Win%',(totalWins/totalGames*100).toFixed(1)+'%'],
+    ['PTS',career.pts_avg.toFixed(1)],['AST',career.ast_avg.toFixed(1)],
+    ['REB',career.trb_avg.toFixed(1)],['STL',career.stl_avg.toFixed(1)],
+    ['BLK',career.blk_avg.toFixed(1)],['FG%',fmtPct(career.fg_pct_avg)],
+    ['TS%',fmtPct(career.ts_pct_avg)],['Deepest',dlabel],
+  ]
+
   return(
     <div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div className="modal" style={{maxWidth:960}}>
-        <button className="modal-close" onClick={onClose} style={{background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff'}}>✕</button>
+        <button className="modal-close" onClick={onClose}>✕</button>
 
-        {/* ── HEADER ── */}
-        <div style={{background:'var(--blue)',borderRadius:'10px 10px 0 0',padding:'24px 28px 20px',color:'#fff'}}>
+        {/* Header */}
+        <div style={{background:'var(--blue)',borderRadius:'8px 8px 0 0',padding:'24px 28px 20px',color:'#fff'}}>
           <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:16,flexWrap:'wrap',marginBottom:16}}>
             <div>
-              <h2 style={{fontSize:30,letterSpacing:'0.04em',color:'#fff',marginBottom:8}}>{player}</h2>
+              <h2 style={{fontSize:30,letterSpacing:'-0.01em',color:'#fff',marginBottom:8,fontFamily:'var(--font-head)'}}>{player}</h2>
               <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                {careerRank&&<span style={{background:'rgba(255,255,255,0.2)',borderRadius:4,padding:'3px 10px',fontSize:12,fontWeight:700,letterSpacing:'0.04em'}}>#{careerRank} All-Time</span>}
-                {championships>0&&<span style={{background:'rgba(255,215,0,0.3)',borderRadius:4,padding:'3px 10px',fontSize:12,fontWeight:700}}>🏆 {championships}× Title</span>}
-                {finalsApp>championships&&<span style={{background:'rgba(255,255,255,0.15)',borderRadius:4,padding:'3px 10px',fontSize:12,fontWeight:600}}>🥈 {finalsApp-championships}× Finals</span>}
-                {seasons.length>0&&<span style={{background:'rgba(255,255,255,0.12)',borderRadius:4,padding:'3px 10px',fontSize:12,color:'rgba(255,255,255,0.8)'}}>{seasons[0].season}–{seasons[seasons.length-1].season}</span>}
+                {careerRank&&<span style={{background:'rgba(255,255,255,0.2)',borderRadius:3,padding:'3px 10px',fontSize:12,fontWeight:700,letterSpacing:'0.04em'}}>#{careerRank} All-Time</span>}
+                {championships>0&&<span style={{background:'rgba(255,215,0,0.28)',borderRadius:3,padding:'3px 10px',fontSize:12,fontWeight:700}}>🏆 {championships}× Title</span>}
+                {finalsApp>championships&&<span style={{background:'rgba(255,255,255,0.14)',borderRadius:3,padding:'3px 10px',fontSize:12,fontWeight:600}}>🥈 {finalsApp-championships}× Finals</span>}
+                {seasons.length>0&&<span style={{background:'rgba(255,255,255,0.10)',borderRadius:3,padding:'3px 10px',fontSize:12,color:'rgba(255,255,255,0.75)',fontFamily:'var(--font-mono)'}}>{seasons[0].season}–{seasons[seasons.length-1].season}</span>}
               </div>
             </div>
             <div style={{textAlign:'right',flexShrink:0}}>
-              <div style={{fontSize:10,color:'rgba(255,255,255,0.55)',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:1}}>Career Game Score</div>
-              <div style={{fontSize:34,fontWeight:700,color:'#fff',letterSpacing:'-0.02em'}}>{gmscSum.toFixed(1)}</div>
-              <div style={{fontSize:11,color:'rgba(255,255,255,0.55)'}}>{gsAvg} per game</div>
+              <div style={{fontSize:10,color:'rgba(255,255,255,0.5)',letterSpacing:'0.10em',textTransform:'uppercase',marginBottom:2}}>Career Game Score</div>
+              <div style={{fontSize:34,fontWeight:700,color:'#fff',fontFamily:'var(--font-mono)',letterSpacing:'-0.02em'}}>{gmscSum.toFixed(1)}</div>
+              <div style={{fontSize:11,color:'rgba(255,255,255,0.5)',fontFamily:'var(--font-mono)'}}>{gsAvg} per game</div>
             </div>
           </div>
-          {/* Quick stats bar */}
-          <div style={{display:'flex',gap:0,borderTop:'1px solid rgba(255,255,255,0.15)',paddingTop:14,flexWrap:'wrap',rowGap:8}}>
-            {[
-              ['Games',String(totalGames)],
-              ['Wins',String(totalWins)],
-              ['Win%',(totalWins/totalGames*100).toFixed(1)+'%'],
-              ['PTS',career.pts_avg.toFixed(1)],
-              ['AST',career.ast_avg.toFixed(1)],
-              ['REB',career.trb_avg.toFixed(1)],
-              ['STL',career.stl_avg.toFixed(1)],
-              ['BLK',career.blk_avg.toFixed(1)],
-              ['FG%',fmtPct(career.fg_pct_avg)],
-              ['TS%',fmtPct(career.ts_pct_avg)],
-              ['Deepest',dlabel],
-            ].map(([l,v],i,arr)=>(
-              <div key={l} style={{paddingRight:14,marginRight:14,borderRight:i<arr.length-1?'1px solid rgba(255,255,255,0.12)':'none'}}>
-                <div style={{fontSize:10,color:'rgba(255,255,255,0.5)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}}>{l}</div>
-                <div style={{fontSize:15,fontWeight:600,color:'#fff',whiteSpace:'nowrap'}}>{v}</div>
+          <div style={{display:'flex',gap:0,borderTop:'1px solid rgba(255,255,255,0.12)',paddingTop:14,flexWrap:'wrap',rowGap:10}}>
+            {STAT_ROW.map(([l,v],i,arr)=>(
+              <div key={l} style={{paddingRight:14,marginRight:14,borderRight:i<arr.length-1?'1px solid rgba(255,255,255,0.10)':'none'}}>
+                <div style={{fontSize:9,color:'rgba(255,255,255,0.45)',textTransform:'uppercase',letterSpacing:'0.09em',marginBottom:2}}>{l}</div>
+                <div style={{fontSize:15,fontWeight:600,color:'#fff',whiteSpace:'nowrap',fontFamily:['Games','Wins'].includes(l)?'var(--font-mono)':'var(--font-body)'}}>{v}</div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* ── TABS ── */}
-        <div className="tab-bar" style={{margin:0,borderRadius:0}}>
+        {/* Tabs */}
+        <div className="tab-bar" style={{borderRadius:0}}>
           {([['overview','Overview'],['radar','Radar'],['seasons','By Season'],['games','Game Log']] as [string,string][]).map(([k,l])=>(
             <button key={k} className={`tab${subTab===k?' active':''}`} onClick={()=>setSubTab(k as typeof subTab)}>{l}</button>
           ))}
         </div>
 
         {loading?(<div className="loading"><div className="spinner"/>Loading…</div>):(
-          <div style={{padding:'20px 24px',overflowY:'auto',maxHeight:'65vh'}}>
+          <div style={{padding:'20px 24px',overflowY:'auto',maxHeight:'64vh'}}>
 
-            {/* ── OVERVIEW ── */}
+            {/* OVERVIEW */}
             {subTab==='overview'&&(
               <div>
                 {/* Badges */}
@@ -498,14 +464,12 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                         badges.g1k>0?`${badges.g1k}× Top-1K Game`:null,
                       ].filter(Boolean) as string[]],
                     ].filter(([,items])=>(items as string[]).length>0).map(([label,items])=>(
-                      <>
-                        <div key={label as string} style={{fontSize:10,fontWeight:700,color:'var(--text3)',letterSpacing:'0.07em',textTransform:'uppercase',paddingTop:4,whiteSpace:'nowrap'}}>{label as string}</div>
-                        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                          {(items as string[]).map(item=>(
-                            <span key={item} style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:4,padding:'3px 10px',fontSize:12,fontWeight:500,color:'var(--text)'}}>{item}</span>
-                          ))}
-                        </div>
-                      </>
+                      <><div key={label as string} style={{fontSize:10,fontWeight:700,color:'var(--text3)',letterSpacing:'0.08em',textTransform:'uppercase',paddingTop:4,whiteSpace:'nowrap'}}>{label as string}</div>
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        {(items as string[]).map(item=>(
+                          <span key={item} style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:3,padding:'3px 10px',fontSize:12,fontWeight:500,color:'var(--text)'}}>{item}</span>
+                        ))}
+                      </div></>
                     ))}
                   </div>
                 )}
@@ -514,22 +478,22 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                 {highlights&&(
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:20}}>
                     <div className="card2" style={{padding:14}}>
-                      <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.07em',textTransform:'uppercase',color:'var(--text3)',marginBottom:8}}>Best Game</div>
-                      <div style={{fontSize:22,fontWeight:700,color:'var(--blue)',marginBottom:4}}>{highlights.bestGame.gmsc_computed.toFixed(1)}</div>
-                      <div style={{fontSize:10,color:'var(--text3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em'}}>Game Score</div>
+                      <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text3)',marginBottom:8}}>Best Game</div>
+                      <div style={{fontSize:22,fontWeight:700,color:'var(--blue)',marginBottom:2,fontFamily:'var(--font-mono)'}}>{highlights.bestGame.gmsc_computed.toFixed(1)}</div>
+                      <div style={{fontSize:10,color:'var(--text3)',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.06em'}}>Game Score</div>
                       <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>{highlights.bestGame.date}</div>
-                      <div style={{fontSize:12,color:'var(--text2)',marginBottom:2}}>{teamName(highlights.bestGame.team)} vs {teamName(highlights.bestGame.opp)}</div>
-                      <div style={{fontSize:11,color:'var(--text2)',marginBottom:6}}>Round {highlights.bestGame.round} · {highlights.bestGame.result==='W'?'W':'L'}</div>
-                      <div style={{fontSize:12,color:'var(--text2)'}}>{highlights.bestGame.pts} PTS · {highlights.bestGame.ast} AST · {highlights.bestGame.trb} REB</div>
+                      <div style={{fontSize:12,color:'var(--text2)',marginBottom:2}}>{teamName(highlights.bestGame.team)} vs. {teamName(highlights.bestGame.opp)}</div>
+                      <div style={{fontSize:11,color:'var(--text3)',marginBottom:6}}>Round {highlights.bestGame.round} · {highlights.bestGame.result==='W'?'Win':'Loss'}</div>
+                      <div style={{fontSize:12,color:'var(--text2)',fontFamily:'var(--font-mono)'}}>{highlights.bestGame.pts} PTS · {highlights.bestGame.ast} AST · {highlights.bestGame.trb} REB</div>
                     </div>
                     {highlights.bestSeasonRow&&(
                       <div className="card2" style={{padding:14}}>
-                        <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.07em',textTransform:'uppercase',color:'var(--text3)',marginBottom:8}}>Best Postseason</div>
-                        <div style={{fontSize:22,fontWeight:700,color:'var(--blue)',marginBottom:4}}>{highlights.bestSeasonRow.gmsc_sum?.toFixed(1)}</div>
-                        <div style={{fontSize:10,color:'var(--text3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em'}}>Total Game Score</div>
+                        <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text3)',marginBottom:8}}>Best Postseason</div>
+                        <div style={{fontSize:22,fontWeight:700,color:'var(--blue)',marginBottom:2,fontFamily:'var(--font-mono)'}}>{highlights.bestSeasonRow.gmsc_sum?.toFixed(1)}</div>
+                        <div style={{fontSize:10,color:'var(--text3)',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.06em'}}>Total Game Score</div>
                         <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>{highlights.bestSeasonRow.season}</div>
                         <div style={{fontSize:12,color:'var(--text2)',marginBottom:2}}>{teamName(highlights.bestSeasonRow.franchise)}</div>
-                        <div style={{fontSize:11,color:'var(--text2)',marginBottom:6}}>{highlights.bestSeasonRow.games} games · {highlights.bestSeasonRow.gmsc_avg?.toFixed(1)}/game</div>
+                        <div style={{fontSize:11,color:'var(--text3)',marginBottom:6}}>{highlights.bestSeasonRow.games} games · {highlights.bestSeasonRow.gmsc_avg?.toFixed(1)}/game</div>
                         <div style={{fontSize:12}}>{highlights.bestSeasonRow.won_championship?'🏆 Title':highlights.bestSeasonRow.finals_appearance?'🥈 Finals':''}</div>
                       </div>
                     )}
@@ -539,13 +503,13 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                       const wins=sg.filter(g=>g.result==='W').length
                       return(
                         <div className="card2" style={{padding:14}}>
-                          <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.07em',textTransform:'uppercase',color:'var(--text3)',marginBottom:8}}>Best Series</div>
-                          <div style={{fontSize:22,fontWeight:700,color:'var(--blue)',marginBottom:4}}>{total.toFixed(1)}</div>
-                          <div style={{fontSize:10,color:'var(--text3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em'}}>Total Game Score</div>
+                          <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text3)',marginBottom:8}}>Best Series</div>
+                          <div style={{fontSize:22,fontWeight:700,color:'var(--blue)',marginBottom:2,fontFamily:'var(--font-mono)'}}>{total.toFixed(1)}</div>
+                          <div style={{fontSize:10,color:'var(--text3)',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.06em'}}>Total Game Score</div>
                           <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>{season} · {rnd}</div>
-                          <div style={{fontSize:12,color:'var(--text2)',marginBottom:2}}>{teamName(team)} vs {teamName(opp)}</div>
-                          <div style={{fontSize:11,color:'var(--text2)',marginBottom:6}}>{sg.length} games · {wins}W–{sg.length-wins}L</div>
-                          <div style={{fontSize:12,color:'var(--text2)'}}>{(total/sg.length).toFixed(1)} per game</div>
+                          <div style={{fontSize:12,color:'var(--text2)',marginBottom:2}}>{teamName(team)} vs. {teamName(opp)}</div>
+                          <div style={{fontSize:11,color:'var(--text3)',marginBottom:6}}>{sg.length} games · {wins}W–{sg.length-wins}L</div>
+                          <div style={{fontSize:12,color:'var(--text2)',fontFamily:'var(--font-mono)'}}>{(total/sg.length).toFixed(1)} per game</div>
                         </div>
                       )
                     })()}
@@ -555,23 +519,24 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                 {/* Season Game Score Total */}
                 <div className="card" style={{padding:'14px 16px',marginBottom:12}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                    <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.07em',textTransform:'uppercase',color:'var(--text2)'}}>Season Game Score Total</div>
-                    <div style={{fontSize:11,color:'var(--text3)'}}>All players in gray — {player} highlighted</div>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text2)'}}>Season Game Score Total</div>
+                    <div style={{fontSize:11,color:'var(--text3)'}}>All players in background · {player} highlighted</div>
                   </div>
                   <SeasonChart allData={allSeasonData} player={player} playerSeasons={seasons}/>
                 </div>
+
                 {/* Game Score Distribution */}
-                <div className="card" style={{padding:'14px 16px',marginBottom:4}}>
+                <div className="card" style={{padding:'14px 16px'}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                    <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.07em',textTransform:'uppercase',color:'var(--text2)'}}>Game Score Distribution</div>
-                    <div style={{fontSize:11,color:'var(--text3)'}}>{games.length} career playoff games · 2.5pt buckets</div>
+                    <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text2)'}}>Game Score Distribution</div>
+                    <div style={{fontSize:11,color:'var(--text3)'}}>{games.length} career games · 2.5pt buckets · dashed = player mean</div>
                   </div>
                   <DistributionChart games={games}/>
                 </div>
               </div>
             )}
 
-            {/* ── RADAR ── */}
+            {/* RADAR */}
             {subTab==='radar'&&(
               <div style={{display:'grid',gridTemplateColumns:'300px 1fr',gap:24}}>
                 <div>
@@ -581,7 +546,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                     ))}
                   </div>
                   {profile==='choose'&&(
-                    <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:8,padding:8,background:'var(--surface2)',borderRadius:6,border:'1px solid var(--border)'}}>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:8,padding:8,background:'var(--surface2)',borderRadius:4,border:'1px solid var(--border)'}}>
                       {ALL_STAT_KEYS.map(k=>{
                         const on=customStats.includes(k)
                         return(
@@ -606,32 +571,27 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                   </div>
                   <RadarChart stats={radarStats} profile={profile} bounds={radarBounds} customStats={customStats}/>
                   <div style={{fontSize:10,color:'var(--text3)',textAlign:'center',marginTop:4}}>
-                    {radarMode==='totals'
-                      ?'Outer ring = 90th percentile career totals (10+ games)'
-                      :radarMode==='best'
-                      ?'Outer ring = 90th percentile per-game (10+ games)'
-                      :'Outer ring = 90th percentile per-game (10+ games)'}
+                    {radarMode==='totals'?'Outer ring = 90th pct career totals':'Outer ring = 90th pct per-game · 10+ game players'}
                   </div>
                 </div>
                 <div>
-                  <div style={{marginBottom:12,fontSize:11,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.06em',fontWeight:600}}>
+                  <div style={{marginBottom:10,fontSize:10,fontWeight:700,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'0.08em'}}>
                     Percentile vs Qualified Players (10+ games)
                   </div>
                   {radarMode==='totals'&&(
-                    <div style={{fontSize:10,color:'var(--blue)',background:'var(--blue-dim)',border:'1px solid rgba(29,66,138,.15)',borderRadius:4,padding:'5px 8px',marginBottom:10,lineHeight:1.5}}>
-                      Totals mode — bars show career totals vs. all qualified players
+                    <div style={{fontSize:11,color:'var(--blue)',background:'var(--blue-dim)',border:'1px solid rgba(29,52,97,.15)',borderRadius:3,padding:'5px 8px',marginBottom:10,lineHeight:1.5}}>
+                      Comparing career totals vs. all qualified players
                     </div>
                   )}
                   {radarMode==='best'&&(
-                    <div style={{fontSize:10,color:'var(--text3)',marginBottom:10,lineHeight:1.4}}>
-                      Bars compare {bestSeason?.season??'best'} season per-game stats vs. all qualified player-seasons
+                    <div style={{fontSize:11,color:'var(--text3)',marginBottom:10,lineHeight:1.5}}>
+                      Comparing {bestSeason?.season??'best'} season per-game stats
                     </div>
                   )}
                   {radarMode==='totals'
                     ? [['PTS','pts_total'],['AST','ast_total'],['REB','trb_total'],['STL','stl_total'],['BLK','blk_total'],['FG%','fg_pct_avg'],['TS%','ts_pct_avg'],['BPM','bpm_avg']].map(([l,k])=>{
-                        // for counting totals use careerTotals values vs distsTotal; for pct stats use career vs dists
                         const isTot=['pts_total','ast_total','trb_total','stl_total','blk_total'].includes(k)
-                        const statKey=isTot?k.replace('_total','_avg'):k // radar key
+                        const statKey=isTot?k.replace('_total','_avg'):k
                         const val=isTot?careerTotals[statKey]??0:career[k]??0
                         const distMap=isTot?distsTotal:dists
                         return <PctBar key={k} label={l} value={val} p={pctCalc(k,val,distMap)} isPct={IS_PCT[k]}/>
@@ -651,7 +611,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
               </div>
             )}
 
-            {/* ── BY SEASON ── */}
+            {/* BY SEASON */}
             {subTab==='seasons'&&(
               <div style={{overflowX:'auto'}}>
                 <table className="data-table">
@@ -662,18 +622,17 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                     <th className="num">STL</th><th className="num">BLK</th><th className="num">TOV</th>
                     <th className="num">FG%</th><th className="num">3P%</th><th className="num">FT%</th>
                     <th className="num">TS%</th><th className="num">MIN</th>
-                    <th className="num">GS/G</th><th className="num">GS Total</th><th className="num">BPM</th>
+                    <th className="num">GS/G</th><th className="num">GS Tot</th><th className="num">BPM</th>
                   </tr></thead>
                   <tbody>
                     {seasons.map(r=>{
                       const isC=champSeasons.has(r.season),isF=finalsSeasons.has(r.season)
                       return(
-                        <tr key={r.season} style={{background:isC?'rgba(254,243,199,0.5)':undefined}}>
-                          <td style={{fontSize:16,width:28}}>{isC?'🏆':isF?'🥈':''}</td>
-                          <td style={{fontWeight:700,color:isC?'#92400E':'var(--blue)'}}>{r.season}</td>
+                        <tr key={r.season} style={{background:isC?'rgba(154,110,28,0.08)':undefined}}>
+                          <td style={{fontSize:15,width:28}}>{isC?'🏆':isF?'🥈':''}</td>
+                          <td style={{fontWeight:700,color:isC?'var(--gold)':'var(--blue)',fontFamily:'var(--font-mono)'}}>{r.season}</td>
                           <td style={{fontSize:12}}>{teamName(r.franchise)}</td>
-                          <td className="num">{r.games}</td>
-                          <td className="num win">{r.wins}</td>
+                          <td className="num">{r.games}</td><td className="num win">{r.wins}</td>
                           <td className="num">{r.win_pct!=null?Number(r.win_pct).toFixed(1)+'%':'—'}</td>
                           <td className="num blue">{r.pts_avg?.toFixed(1)}</td>
                           <td className="num">{r.ast_avg?.toFixed(1)}</td><td className="num">{r.trb_avg?.toFixed(1)}</td>
@@ -693,41 +652,33 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
               </div>
             )}
 
-            {/* ── GAME LOG ── */}
+            {/* GAME LOG */}
             {subTab==='games'&&(
               <div style={{overflowX:'auto'}}>
                 <table className="data-table">
                   <thead><tr>
-                    <GameTh col="date">Date</GameTh>
-                    <th>Team</th><th>Opp</th>
-                    <GameTh col="result">W/L</GameTh>
-                    <GameTh col="round" right>Rnd</GameTh>
+                    <GameTh col="date">Date</GameTh><th>Team</th><th>Opp</th>
+                    <GameTh col="result">W/L</GameTh><GameTh col="round" right>Rnd</GameTh>
                     <th>Series</th>
-                    <GameTh col="pts" right>PTS</GameTh>
-                    <GameTh col="ast" right>AST</GameTh>
-                    <GameTh col="trb" right>REB</GameTh>
-                    <GameTh col="stl" right>STL</GameTh>
-                    <GameTh col="blk" right>BLK</GameTh>
-                    <GameTh col="tov" right>TOV</GameTh>
-                    <GameTh col="fg_pct" right>FG%</GameTh>
-                    <GameTh col="three_p" right>3PM</GameTh>
-                    <GameTh col="ts_pct" right>TS%</GameTh>
-                    <GameTh col="mp" right>MIN</GameTh>
+                    <GameTh col="pts" right>PTS</GameTh><GameTh col="ast" right>AST</GameTh>
+                    <GameTh col="trb" right>REB</GameTh><GameTh col="stl" right>STL</GameTh>
+                    <GameTh col="blk" right>BLK</GameTh><GameTh col="tov" right>TOV</GameTh>
+                    <GameTh col="fg_pct" right>FG%</GameTh><GameTh col="three_p" right>3PM</GameTh>
+                    <GameTh col="ts_pct" right>TS%</GameTh><GameTh col="mp" right>MIN</GameTh>
                     <GameTh col="gmsc_computed" right>Game Score</GameTh>
-                    <GameTh col="bpm" right>BPM</GameTh>
-                    <GameTh col="plus_minus" right>+/-</GameTh>
+                    <GameTh col="bpm" right>BPM</GameTh><GameTh col="plus_minus" right>+/-</GameTh>
                   </tr></thead>
                   <tbody>
                     {sortedGames.map(g=>{
                       const isChamp=champSeasons.has(g.season)&&g.result==='W'&&g.series_my_wins===3
                       return(
-                        <tr key={g.id} style={{background:isChamp?'rgba(254,243,199,0.5)':undefined}}>
-                          <td>{g.date}</td>
+                        <tr key={g.id} style={{background:isChamp?'rgba(154,110,28,0.07)':undefined}}>
+                          <td style={{fontFamily:'var(--font-mono)',fontSize:12}}>{g.date}</td>
                           <td><span className="tag tag-dim">{g.team}</span></td>
                           <td style={{color:'var(--text2)'}}>{g.opp}</td>
                           <td className={g.result==='W'?'win':'loss'}>{g.result}</td>
                           <td className="num">{g.round}</td>
-                          <td style={{fontSize:11,color:'var(--text2)'}}>G{g.series_my_wins+g.series_opp_wins+1} ({Math.max(g.series_my_wins,g.series_opp_wins)}–{Math.min(g.series_my_wins,g.series_opp_wins)})</td>
+                          <td style={{fontSize:11,color:'var(--text2)',fontFamily:'var(--font-mono)'}}>G{g.series_my_wins+g.series_opp_wins+1} ({Math.max(g.series_my_wins,g.series_opp_wins)}–{Math.min(g.series_my_wins,g.series_opp_wins)})</td>
                           <td className="num blue">{g.pts??'—'}</td>
                           <td className="num">{g.ast??'—'}</td><td className="num">{g.trb??'—'}</td>
                           <td className="num">{g.stl??'—'}</td><td className="num">{g.blk??'—'}</td>

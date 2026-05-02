@@ -77,7 +77,7 @@ export default function AggregatePage() {
   const [page, setPage]           = useState(0)
   const [loading, setLoading]     = useState(false)
   const [modal, setModal]         = useState<string|null>(null)
-  const debRef = useRef<ReturnType<typeof setTimeout>>()
+  const debRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const hasAdvancedFilters = franchise !== '' || seasonMin !== 1947 || seasonMax !== 2026
 
