@@ -224,21 +224,26 @@ export default function GoatPage() {
 
   // Per-franchise top-20 leaderboard
   const franchiseLeaders = useMemo(() => {
-    if (!dataLoaded) return new Map<string, {player:string;goatScore:number;adjSum:number;games:number}[]>()
-    const result = new Map<string, {player:string;goatScore:number;adjSum:number;games:number}[]>()
+    if (!dataLoaded) return new Map<string, {player:string;goatScore:number;adjVal:number;games:number}[]>()
+    const result = new Map<string, {player:string;goatScore:number;adjVal:number;games:number}[]>()
     for (const fr of ACTIVE_FRANCHISES) {
       const frRows = goatData.filter(r => FRANCHISE_ROLLUP[r.team] === fr.abbr)
-      const lb = buildLeaderboard(frRows, weights)
-      if (minGames) lb.filter(r => r.games >= Number(minGames))
-      lb.sort((a,b) => aggMode==='sum' ? b.adjSum-a.adjSum : b.adjAvg-a.adjAvg)
+      let lb = buildLeaderboard(frRows, weights)
+      if (minGames) lb = lb.filter(r => r.games >= Number(minGames))
+      const isAvg = aggMode === 'avg'
+      lb.sort((a,b) => isAvg ? b.adjAvg-a.adjAvg : b.adjSum-a.adjSum)
       const top = lb.slice(0,20)
-      const maxScore = top[0]?.adjSum ?? 1
-      result.set(fr.abbr, top.map(r => ({
-        player: r.player,
-        goatScore: maxScore > 0 ? Math.round(r.adjSum / maxScore * 1000) / 10 : 0,
-        adjSum: r.adjSum,
-        games: r.games,
-      })))
+      // Normalize using the same metric we're ranking by
+      const maxVal = isAvg ? (top[0]?.adjAvg ?? 1) : (top[0]?.adjSum ?? 1)
+      result.set(fr.abbr, top.map(r => {
+        const val = isAvg ? r.adjAvg : r.adjSum
+        return {
+          player: r.player,
+          goatScore: maxVal > 0 ? Math.round(val / maxVal * 1000) / 10 : 0,
+          adjVal: val,
+          games: r.games,
+        }
+      }))
     }
     return result
   }, [goatData, weights, minGames, aggMode, dataLoaded])
@@ -488,7 +493,7 @@ export default function GoatPage() {
                                   onClick={()=>setModal(r.player)}>{r.player}</td>
                                 <td className="num" style={{fontSize:12}}>{r.games}</td>
                                 <td className="num" style={{color:'var(--gold)',fontWeight:700,fontSize:13}}>{r.goatScore.toFixed(1)}</td>
-                                <td className="num" style={{fontSize:12,color:'var(--text2)'}}>{aggMode==='sum'?r.adjSum.toFixed(1):(r.adjSum/r.games).toFixed(2)}</td>
+                                <td className="num" style={{fontSize:12,color:'var(--text2)'}}>{r.adjVal.toFixed(aggMode==='avg'?2:1)}</td>
                               </tr>
                             ))}
                             {leaders.length===0&&<tr><td colSpan={5} className="empty" style={{padding:'12px 0'}}>No data</td></tr>}
