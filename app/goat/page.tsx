@@ -468,37 +468,39 @@ export default function GoatPage() {
               {!dataLoaded?(
                 <div className="loading"><div className="spinner"/>Loading…</div>
               ):(
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:20}}>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(360px,1fr))',gap:20}}>
                   {ACTIVE_FRANCHISES.map(fr => {
                     const leaders = franchiseLeaders.get(fr.abbr) ?? []
                     return (
-                      <div key={fr.abbr} className="card" style={{padding:0,overflow:'hidden'}}>
+                      <div key={fr.abbr} className="card" style={{padding:0,overflow:'hidden',minWidth:0}}>
                         <div style={{background:'var(--blue)',padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                          <span style={{fontFamily:'var(--font-head)',fontSize:15,fontWeight:700,color:'#fff'}}>{fr.name}</span>
-                          <span style={{fontSize:11,color:'rgba(255,255,255,0.5)',fontFamily:'var(--font-mono)'}}>{leaders.length} players</span>
+                          <span style={{fontFamily:'var(--font-head)',fontSize:15,fontWeight:700,color:'#fff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fr.name}</span>
+                          <span style={{fontSize:11,color:'rgba(255,255,255,0.5)',fontFamily:'var(--font-mono)',flexShrink:0,marginLeft:8}}>{leaders.length} players</span>
                         </div>
-                        <table className="data-table" style={{fontSize:13}}>
-                          <thead><tr>
-                            <th style={{width:28,paddingLeft:10}}>#</th>
-                            <th>Player</th>
-                            <th className="num">G</th>
-                            <th className="num" style={{color:'var(--gold)'}}>Score</th>
-                            <th className="num">{aggMode==='sum'?'Adj Total':'Adj Avg'}</th>
-                          </tr></thead>
-                          <tbody>
-                            {leaders.map((r,i) => (
-                              <tr key={r.player}>
-                                <td style={{color:'var(--text3)',fontSize:12,paddingLeft:10,fontFamily:'var(--font-mono)'}}>{i+1}</td>
-                                <td className="player-cell" style={{fontSize:13,fontWeight:i===0?700:400,color:i===0?'var(--blue)':'var(--text)'}}
-                                  onClick={()=>setModal(r.player)}>{r.player}</td>
-                                <td className="num" style={{fontSize:12}}>{r.games}</td>
-                                <td className="num" style={{color:'var(--gold)',fontWeight:700,fontSize:13}}>{r.goatScore.toFixed(1)}</td>
-                                <td className="num" style={{fontSize:12,color:'var(--text2)'}}>{r.adjVal.toFixed(aggMode==='avg'?2:1)}</td>
-                              </tr>
-                            ))}
-                            {leaders.length===0&&<tr><td colSpan={5} className="empty" style={{padding:'12px 0'}}>No data</td></tr>}
-                          </tbody>
-                        </table>
+                        <div style={{overflowX:'auto'}}>
+                          <table className="data-table" style={{fontSize:13,minWidth:'100%'}}>
+                            <thead><tr>
+                              <th style={{width:28,paddingLeft:10}}>#</th>
+                              <th style={{minWidth:130}}>Player</th>
+                              <th className="num" style={{minWidth:36}}>G</th>
+                              <th className="num" style={{minWidth:58,color:'var(--gold)'}}>Score</th>
+                              <th className="num" style={{minWidth:72}}>{aggMode==='sum'?'Adj Total':'Adj Avg'}</th>
+                            </tr></thead>
+                            <tbody>
+                              {leaders.map((r,i) => (
+                                <tr key={r.player}>
+                                  <td style={{color:'var(--text3)',fontSize:12,paddingLeft:10,fontFamily:'var(--font-mono)'}}>{i+1}</td>
+                                  <td className="player-cell" style={{fontSize:13,fontWeight:i===0?700:400,color:i===0?'var(--blue)':'var(--text)',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis'}}
+                                    onClick={()=>setModal(r.player)}>{r.player}</td>
+                                  <td className="num" style={{fontSize:12}}>{r.games}</td>
+                                  <td className="num" style={{color:'var(--gold)',fontWeight:700,fontSize:13}}>{r.goatScore.toFixed(1)}</td>
+                                  <td className="num" style={{fontSize:12,color:'var(--text2)'}}>{r.adjVal.toFixed(aggMode==='avg'?2:1)}</td>
+                                </tr>
+                              ))}
+                              {leaders.length===0&&<tr><td colSpan={5} className="empty" style={{padding:'12px 0'}}>No data</td></tr>}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )
                   })}
