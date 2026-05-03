@@ -7,7 +7,7 @@ import {
   ABS_MAX, getFormatInfo,
 } from '@/lib/scoring'
 import type { GoatWeights, GoatGameRow } from '@/lib/types'
-import { ALL_FRANCHISES, ACTIVE_FRANCHISES, DEFUNCT_FRANCHISES, FRANCHISE_ROLLUP } from '@/lib/franchise'
+import { ALL_FRANCHISES, ACTIVE_FRANCHISES, DEFUNCT_FRANCHISES, FRANCHISE_ROLLUP, FRANCHISE_NAMES } from '@/lib/franchise'
 import type { CareerRow } from '@/lib/scoring'
 import PlayerModal from '@/components/PlayerModal'
 
@@ -140,7 +140,7 @@ function Methodology() {
 const GOAT_PAGE = 50
 
 export default function GoatPage() {
-  const [tab, setTab]         = useState<'methodology'|'heatmap'|'allgames'|'leaderboard'>('leaderboard')
+  const [tab, setTab]         = useState<'methodology'|'heatmap'|'allgames'|'leaderboard'|'franchise'>('leaderboard')
   const [weights, setWeights] = useState<GoatWeights>(DEFAULT_WEIGHTS)
   const [preset, setPreset]   = useState('balanced')
   const [persp, setPersp]     = useState<'leading'|'trailing'>('leading')
@@ -221,6 +221,27 @@ export default function GoatPage() {
     rows.sort((a,b) => aggMode==='sum' ? b.adjSum-a.adjSum : b.adjAvg-a.adjAvg)
     return rows
   }, [goatData, weights, minGames, aggMode, dataLoaded, franchiseFilter])
+
+  // Per-franchise top-20 leaderboard
+  const franchiseLeaders = useMemo(() => {
+    if (!dataLoaded) return new Map<string, {player:string;goatScore:number;adjSum:number;games:number}[]>()
+    const result = new Map<string, {player:string;goatScore:number;adjSum:number;games:number}[]>()
+    for (const fr of ACTIVE_FRANCHISES) {
+      const frRows = goatData.filter(r => FRANCHISE_ROLLUP[r.team] === fr.abbr)
+      const lb = buildLeaderboard(frRows, weights)
+      if (minGames) lb.filter(r => r.games >= Number(minGames))
+      lb.sort((a,b) => aggMode==='sum' ? b.adjSum-a.adjSum : b.adjAvg-a.adjAvg)
+      const top = lb.slice(0,20)
+      const maxScore = top[0]?.adjSum ?? 1
+      result.set(fr.abbr, top.map(r => ({
+        player: r.player,
+        goatScore: maxScore > 0 ? Math.round(r.adjSum / maxScore * 1000) / 10 : 0,
+        adjSum: r.adjSum,
+        games: r.games,
+      })))
+    }
+    return result
+  }, [goatData, weights, minGames, aggMode, dataLoaded])
 
   // All-games computation (sorted desc, search filtered)
   const allGames = useMemo(() => {
@@ -363,7 +384,7 @@ export default function GoatPage() {
           </button>
         </div>
         <div className="tab-bar" style={{flexShrink:0,paddingLeft:16}}>
-          {([['leaderboard','Career Rankings'],['allgames','All Games'],['heatmap','Heat Map'],['methodology','Methodology']] as [string,string][]).map(([k,l])=>(
+          {([['leaderboard','Career Rankings'],['franchise','Franchise Leaders'],['allgames','All Games'],['heatmap','Heat Map'],['methodology','Methodology']] as [string,string][]).map(([k,l])=>(
             <button key={k} className={`tab${tab===k?' active':''}`} onClick={()=>setTab(k as typeof tab)}>{l}</button>
           ))}
         </div>
@@ -437,6 +458,50 @@ export default function GoatPage() {
           )}
 
           {/* ── ALL GAMES ── */}
+          {tab==='franchise'&&(
+            <div style={{flex:1,overflowX:'auto',overflowY:'auto',padding:'16px'}}>
+              {!dataLoaded?(
+                <div className="loading"><div className="spinner"/>Loading…</div>
+              ):(
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:20}}>
+                  {ACTIVE_FRANCHISES.map(fr => {
+                    const leaders = franchiseLeaders.get(fr.abbr) ?? []
+                    return (
+                      <div key={fr.abbr} className="card" style={{padding:0,overflow:'hidden'}}>
+                        <div style={{background:'var(--blue)',padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                          <span style={{fontFamily:'var(--font-head)',fontSize:15,fontWeight:700,color:'#fff'}}>{fr.name}</span>
+                          <span style={{fontSize:11,color:'rgba(255,255,255,0.5)',fontFamily:'var(--font-mono)'}}>{leaders.length} players</span>
+                        </div>
+                        <table className="data-table" style={{fontSize:13}}>
+                          <thead><tr>
+                            <th style={{width:28,paddingLeft:10}}>#</th>
+                            <th>Player</th>
+                            <th className="num">G</th>
+                            <th className="num" style={{color:'var(--gold)'}}>Score</th>
+                            <th className="num">{aggMode==='sum'?'Adj Total':'Adj Avg'}</th>
+                          </tr></thead>
+                          <tbody>
+                            {leaders.map((r,i) => (
+                              <tr key={r.player}>
+                                <td style={{color:'var(--text3)',fontSize:12,paddingLeft:10,fontFamily:'var(--font-mono)'}}>{i+1}</td>
+                                <td className="player-cell" style={{fontSize:13,fontWeight:i===0?700:400,color:i===0?'var(--blue)':'var(--text)'}}
+                                  onClick={()=>setModal(r.player)}>{r.player}</td>
+                                <td className="num" style={{fontSize:12}}>{r.games}</td>
+                                <td className="num" style={{color:'var(--gold)',fontWeight:700,fontSize:13}}>{r.goatScore.toFixed(1)}</td>
+                                <td className="num" style={{fontSize:12,color:'var(--text2)'}}>{aggMode==='sum'?r.adjSum.toFixed(1):(r.adjSum/r.games).toFixed(2)}</td>
+                              </tr>
+                            ))}
+                            {leaders.length===0&&<tr><td colSpan={5} className="empty" style={{padding:'12px 0'}}>No data</td></tr>}
+                          </tbody>
+                        </table>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {tab==='allgames'&&(
             <>
               <div style={{padding:'10px 16px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',alignItems:'center',gap:12}}>
