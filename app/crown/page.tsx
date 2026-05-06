@@ -116,7 +116,7 @@ function ReignGameLog({player,crownRows}:{player:string;crownRows:CrownRow[]}){
 }
 
 // ── Reign Timeline ─────────────────────────────────────────────────────────
-function ReignTimeline({stints,onPlayer}:{stints:Stint[];onPlayer:(p:string)=>void}){
+function ReignTimeline({stints,onPlayer,currentPlayer}:{stints:Stint[];onPlayer:(p:string)=>void;currentPlayer:string}){
   const [search,setSearch]=useState('')
   const [expanded,setExpanded]=useState<Set<string>>(new Set())
   const [transfersOnly,setTransfersOnly]=useState(false)
@@ -176,7 +176,10 @@ function ReignTimeline({stints,onPlayer}:{stints:Stint[];onPlayer:(p:string)=>vo
             {filtered.map((stint,idx)=>{
               const isNewSeason=stint.season!==lastSeason
               if(isNewSeason)lastSeason=stint.season
-              const rs=reignStyle(stint.games)
+              const isCurrent=stint.player===currentPlayer&&stint.loseToPlayer===null&&idx===0
+              const rs=isCurrent
+                ?{borderColor:'#9A6E1C',bg:'rgba(154,110,28,0.07)',headerBg:'rgba(154,110,28,0.15)',accentColor:'#9A6E1C'}
+                :reignStyle(stint.games)
               const key=`${stint.player}-${stint.stintNum}`
               const isExpanded=expanded.has(key)
               const isAcquire=stint.acquireEvent!=='defend'
@@ -196,11 +199,11 @@ function ReignTimeline({stints,onPlayer}:{stints:Stint[];onPlayer:(p:string)=>vo
 
                   {/* Reign card */}
                   <div style={{
-                    border:`1px solid ${rs.borderColor}`,
-                    borderLeft:`4px solid ${rs.borderColor}`,
-                    borderRadius:3, marginBottom:8, overflow:'hidden',
+                    border:isCurrent?`2px solid #9A6E1C`:`1px solid ${rs.borderColor}`,
+                    borderLeft:isCurrent?`5px solid #9A6E1C`:`4px solid ${rs.borderColor}`,
+                    borderRadius:4, marginBottom:8, overflow:'hidden',
                     background:rs.bg,
-                    boxShadow:stint.games>=5?`0 2px 12px rgba(154,110,28,0.12)`:undefined
+                    boxShadow:isCurrent?'0 4px 20px rgba(154,110,28,0.20)':stint.games>=5?'0 2px 12px rgba(154,110,28,0.12)':undefined
                   }}>
                     {/* Reign header */}
                     <div style={{
@@ -216,7 +219,7 @@ function ReignTimeline({stints,onPlayer}:{stints:Stint[];onPlayer:(p:string)=>vo
 
                       <div style={{flex:1,minWidth:0}}>
                         {/* Title line */}
-                        <div style={{fontFamily:'var(--font-head)',fontSize:stint.games>=5?18:stint.games>=3?16:14,fontWeight:700,color:rs.accentColor,lineHeight:1.2,marginBottom:3}}>
+                        <div style={{fontFamily:'var(--font-head)',fontSize:isCurrent?22:stint.games>=5?18:stint.games>=3?16:14,fontWeight:700,color:rs.accentColor,lineHeight:1.2,marginBottom:3}}>
                           Reign of King {stint.player}
                           <span style={{fontFamily:'var(--font-head)',fontSize:stint.games>=3?14:12,fontWeight:400,fontStyle:'italic',marginLeft:8,color:'var(--text2)'}}>
                             {toRoman(stint.stintNum)}
@@ -622,7 +625,7 @@ export default function CrownPage(){
             </div>
           </div>
         ):tab==='timeline'?(
-          <ReignTimeline stints={stints} onPlayer={setModal}/>
+          <ReignTimeline stints={stints} onPlayer={setModal} currentPlayer={current?.player??''}/>
         ):(
           <div style={{flex:1,overflowY:'auto',padding:'24px 32px',maxWidth:760,margin:'0 auto'}}>
             <div className="section-head">The Crown — Rules & Methodology</div>

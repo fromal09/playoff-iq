@@ -773,59 +773,70 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                 )}
 
 
-                {/* Reign History */}
+                                {/* Reign History */}
                 {crownStints.length>0&&(
                   <div style={{marginBottom:20}}>
-                    <div style={{fontSize:10,fontWeight:700,color:'var(--text3)',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:10,borderTop:'2px solid var(--text)',paddingTop:8}}>
+                    <div style={{fontFamily:'var(--font-head)',fontSize:14,fontWeight:700,color:'var(--blue)',marginBottom:8,borderTop:'2px solid var(--text)',paddingTop:8}}>
                       👑 Reign History — {crownStints.length} {crownStints.length===1?'Reign':'Reigns'}
                     </div>
-                    <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                      {crownStints.slice().reverse().map((stint)=>{
+                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                      {crownStints.slice().reverse().map((stint,ridx)=>{
                         const games=stint.rows.length
-                        const start=stint.rows[0].date
-                        const end=stint.rows[stint.rows.length-1].date
-                        const team=stint.rows[0].crown_team
-                        const acquireEvent=stint.rows[0].event
-                        const dethronedBy=null // crown_history only has who took it, not who lost it here
-                        const borderW=games>=5?2:games>=3?1.5:1
-                        const bgAlpha=games>=5?0.06:games>=3?0.04:0.02
-                        // Roman numeral
+                        const start=(stint.rows[0] as CrownHistoryRow).date
+                        const end=(stint.rows[stint.rows.length-1] as CrownHistoryRow).date
+                        const team=(stint.rows[0] as CrownHistoryRow).crown_team
+                        const acquireEvent=(stint.rows[0] as CrownHistoryRow).event
                         const n=stint.stintNum
-                        function toRoman(num:number):string{
+                        function toRomanM(num:number):string{
                           const v=[1000,900,500,400,100,90,50,40,10,9,5,4,1]
                           const s=['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I']
-                          let r='',i=0
-                          while(num>0){while(num>=v[i]){r+=s[i];num-=v[i]}i++}
+                          let r='',i=0;while(num>0){while(num>=v[i]){r+=s[i];num-=v[i]}i++}
                           return r
                         }
-                        const eventLabel = acquireEvent==='initial'?'First Ever':acquireEvent==='new_season'?'New Season':acquireEvent==='transfer_loss'?'Wrested Away':'From Teammate'
+                        // Is this the current/active reign? (most recent = ridx===0, not yet dethroned)
+                        const isActive=ridx===0
+                        const accentColor=isActive?'#9A6E1C':games>=5?'var(--gold)':games>=3?'var(--blue)':'var(--text3)'
+                        const borderColor=isActive?'#9A6E1C':games>=5?'#9A6E1C':games>=3?'var(--blue)':'var(--border)'
+                        const headerBg=isActive?'rgba(154,110,28,0.13)':games>=5?'rgba(154,110,28,0.10)':games>=3?'rgba(27,46,94,0.08)':'var(--surface2)'
+                        const cardKey=`modal-reign-${n}`
+                        const isExpanded=modalExpandedReigns.has(cardKey)
+                        const eventLabel=acquireEvent==='initial'?'First Ever':acquireEvent==='new_season'?'New Season':acquireEvent==='transfer_loss'?'Wrested Away':'From Teammate'
                         return(
-                          <div key={stint.stintNum} style={{
-                            border:`${borderW}px solid ${games>=4?'var(--gold)':'var(--border)'}`,
-                            borderLeft:`3px solid ${games>=5?'var(--gold)':games>=3?'var(--blue)':'var(--border)'}`,
-                            borderRadius:3, padding:'10px 14px',
-                            background:`rgba(27,46,94,${bgAlpha})`,
+                          <div key={n} style={{
+                            border:isActive?`2px solid #9A6E1C`:`1px solid ${borderColor}`,
+                            borderLeft:isActive?`5px solid #9A6E1C`:`4px solid ${borderColor}`,
+                            borderRadius:4,overflow:'hidden',
+                            boxShadow:isActive?'0 4px 16px rgba(154,110,28,0.18)':games>=5?'0 2px 8px rgba(154,110,28,0.10)':undefined
                           }}>
-                            <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:4,flexWrap:'wrap'}}>
-                              <span style={{fontFamily:'var(--font-head)',fontSize:14,fontWeight:700,color:games>=4?'var(--gold)':'var(--blue)'}}>
-                                Reign {toRoman(n)}
-                              </span>
-                              <span style={{fontSize:11,color:'var(--text3)',fontFamily:'var(--font-mono)'}}>
-                                {start}{start!==end?` → ${end}`:''} · {team}
-                              </span>
-                              <span style={{fontSize:10,background:games>=4?'var(--gold-dim)':'var(--surface2)',border:`1px solid ${games>=4?'var(--gold)':'var(--border)'}`,borderRadius:2,padding:'1px 6px',color:games>=4?'var(--gold)':'var(--text3)',fontWeight:600}}>
-                                {games}g {games>=5?'⚡':games>=3?'🔥':''}
-                              </span>
-                              <span style={{fontSize:10,color:'var(--text3)'}}>{eventLabel}</span>
-                            </div>
-                            {/* Games list for longer reigns */}
-                            {games>1&&(
-                              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:4}}>
-                                {(stint.rows as CrownHistoryRow[]).map((row:CrownHistoryRow,gi:number)=>(
-                                  <span key={gi} style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text3)',background:'var(--surface2)',padding:'1px 5px',borderRadius:2,border:'1px solid var(--border)'}}>
-                                    {row.date.slice(5)} vs {row.opp} · {Number(row.gmsc).toFixed(1)}
+                            {/* Header */}
+                            <div style={{padding:'9px 12px',background:headerBg,cursor:'pointer',display:'flex',alignItems:'flex-start',gap:10}}
+                              onClick={()=>setModalExpandedReigns(s=>{const ns=new Set(s);ns.has(cardKey)?ns.delete(cardKey):ns.add(cardKey);return ns})}>
+                              <div style={{fontSize:isActive?20:games>=5?18:games>=3?16:14,lineHeight:1,flexShrink:0,paddingTop:1}}>
+                                {isActive?'👑':games>=5?'🏅':'🔸'}
+                              </div>
+                              <div style={{flex:1,minWidth:0}}>
+                                {isActive&&(
+                                  <span style={{background:'#9A6E1C',color:'#fff',fontSize:9,fontWeight:700,letterSpacing:'0.10em',textTransform:'uppercase',padding:'2px 8px',borderRadius:2,display:'inline-block',marginBottom:4}}>
+                                    ⚔ Active Reign
                                   </span>
-                                ))}
+                                )}
+                                <div style={{fontFamily:'var(--font-head)',fontSize:isActive?17:games>=5?15:games>=3?13:12,fontWeight:700,color:accentColor,marginBottom:2}}>
+                                  King {player} {toRomanM(n)}
+                                </div>
+                                <div style={{display:'flex',gap:8,fontSize:11,color:'var(--text2)',flexWrap:'wrap'}}>
+                                  <span style={{fontFamily:'var(--font-mono)'}}>{start}{start!==end?` – ${end}`:''}</span>
+                                  <span>·</span><span>{FRANCHISE_NAMES[team]??team}</span>
+                                  <span>·</span>
+                                  <span style={{color:accentColor,fontWeight:600}}>{games}g {games>=5?'⚡':games>=3?'🔥':''}</span>
+                                  <span style={{color:'var(--text3)'}}>{eventLabel}</span>
+                                </div>
+                              </div>
+                              <span style={{fontSize:10,color:'var(--text3)',flexShrink:0}}>{isExpanded?'▲':'▼'}</span>
+                            </div>
+                            {/* Expanded box score */}
+                            {isExpanded&&(
+                              <div style={{padding:'8px 12px',borderTop:`1px solid ${borderColor}`}}>
+                                <ModalReignGameLog player={player} crownRows={stint.rows as CrownHistoryRow[]}/>
                               </div>
                             )}
                           </div>
