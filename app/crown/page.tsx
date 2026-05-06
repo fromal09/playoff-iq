@@ -34,6 +34,87 @@ function toRoman(n:number):string{
   return r
 }
 
+
+type BoxRow = {
+  date:string; opp:string; result:string; team_score:number|null; opp_score:number|null
+  pts:number|null; ast:number|null; trb:number|null; stl:number|null; blk:number|null
+  tov:number|null; fg:number|null; fga:number|null; fg_pct:number|null
+  three_p:number|null; ft:number|null; fta:number|null; mp:number|null; gmsc_computed:number
+}
+
+function ReignGameLog({player,crownRows}:{player:string;crownRows:CrownRow[]}){
+  const [boxScores,setBoxScores]=useState<Map<string,BoxRow>>(new Map())
+  const [boxLoading,setBoxLoading]=useState(true)
+
+  useEffect(()=>{
+    async function load(){
+      setBoxLoading(true)
+      const dates=crownRows.map(r=>r.date)
+      const {data}=await supabase.from('player_games')
+        .select('date,opp,result,team_score,opp_score,pts,ast,trb,stl,blk,tov,fg,fga,fg_pct,three_p,ft,fta,mp,gmsc_computed')
+        .eq('player',player).in('date',dates)
+      if(data){
+        const m=new Map<string,BoxRow>()
+        for(const row of data as BoxRow[]) m.set(row.date,row)
+        setBoxScores(m)
+      }
+      setBoxLoading(false)
+    }
+    load()
+  },[player,crownRows])
+
+  const fmtPct=(v:number|null)=>v!=null?(v*100).toFixed(0)+'%':'—'
+  const fmtN=(v:number|null)=>v!=null?String(v):'—'
+
+  if(boxLoading) return <div style={{padding:'8px 0',fontSize:11,color:'var(--text3)'}}>Loading box scores…</div>
+
+  return(
+    <div style={{overflowX:'auto'}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:560}}>
+        <thead>
+          <tr style={{borderBottom:'2px solid var(--text)'}}>
+            {['Date','Opp','Score','MP','PTS','REB','AST','STL','BLK','TOV','FG','3P','FT%','GmSc',''].map(h=>(
+              <th key={h} style={{padding:'4px 6px',fontSize:9,letterSpacing:'0.09em',textTransform:'uppercase',color:'var(--text3)',textAlign:h===''||h==='Date'||h==='Opp'||h==='Score'?'left':'right',whiteSpace:'nowrap'}}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {crownRows.map((row,gi)=>{
+            const b=boxScores.get(row.date)
+            return(
+              <tr key={gi} style={{borderBottom:'1px solid var(--border)',background:gi%2===0?'transparent':'rgba(0,0,0,0.02)'}}>
+                <td style={{padding:'5px 6px',fontFamily:'var(--font-mono)',color:'var(--text2)',fontSize:11}}>{row.date}</td>
+                <td style={{padding:'5px 6px',color:'var(--text2)'}}>{row.opp}</td>
+                <td style={{padding:'5px 6px',fontFamily:'var(--font-mono)',fontSize:11,whiteSpace:'nowrap'}}>
+                  {b?<span style={{color:b.result==='W'?'var(--green)':'var(--red)',fontWeight:600}}>{b.result} {b.team_score}–{b.opp_score}</span>:'—'}
+                </td>
+                <td style={{padding:'5px 6px',textAlign:'right',fontFamily:'var(--font-mono)',color:'var(--text2)',fontSize:11}}>{b?Math.round(b.mp??0):'—'}</td>
+                <td style={{padding:'5px 6px',textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--blue)'}}>{fmtN(b?.pts??null)}</td>
+                <td style={{padding:'5px 6px',textAlign:'right',fontFamily:'var(--font-mono)'}}>{fmtN(b?.trb??null)}</td>
+                <td style={{padding:'5px 6px',textAlign:'right',fontFamily:'var(--font-mono)'}}>{fmtN(b?.ast??null)}</td>
+                <td style={{padding:'5px 6px',textAlign:'right',fontFamily:'var(--font-mono)'}}>{fmtN(b?.stl??null)}</td>
+                <td style={{padding:'5px 6px',textAlign:'right',fontFamily:'var(--font-mono)'}}>{fmtN(b?.blk??null)}</td>
+                <td style={{padding:'5px 6px',textAlign:'right',fontFamily:'var(--font-mono)',color:((b?.tov??0)>3)?'var(--red)':'inherit'}}>{fmtN(b?.tov??null)}</td>
+                <td style={{padding:'5px 6px',textAlign:'right',fontFamily:'var(--font-mono)',fontSize:11,whiteSpace:'nowrap'}}>
+                  {b?`${fmtN(b.fg)}/${fmtN(b.fga)}`:'—'}
+                </td>
+                <td style={{padding:'5px 6px',textAlign:'right',fontFamily:'var(--font-mono)'}}>{fmtN(b?.three_p??null)}</td>
+                <td style={{padding:'5px 6px',textAlign:'right',fontFamily:'var(--font-mono)'}}>{b?.fta?`${fmtN(b.ft)}/${fmtN(b.fta)}`:'—'}</td>
+                <td style={{padding:'5px 6px',textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--blue)'}}>
+                  {b?Number(b.gmsc_computed).toFixed(1):Number(row.gmsc).toFixed(1)}
+                </td>
+                <td style={{padding:'5px 6px',textAlign:'center',fontSize:11,color:row.event==='defend'?'var(--green)':row.event==='initial'?'var(--gold)':'var(--text3)'}}>
+                  {row.event==='defend'?'🛡':row.event==='initial'?'👑':''}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 // ── Reign Timeline ─────────────────────────────────────────────────────────
 function ReignTimeline({stints,onPlayer}:{stints:Stint[];onPlayer:(p:string)=>void}){
   const [search,setSearch]=useState('')
@@ -170,31 +251,7 @@ function ReignTimeline({stints,onPlayer}:{stints:Stint[];onPlayer:(p:string)=>vo
                           </div>
                         )}
 
-                        {/* Game-by-game table */}
-                        <div style={{overflowX:'auto'}}>
-                          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
-                            <thead>
-                              <tr style={{borderBottom:'1px solid var(--border)'}}>
-                                <th style={{textAlign:'left',padding:'4px 8px',fontSize:9.5,letterSpacing:'0.09em',textTransform:'uppercase',color:'var(--text3)',fontFamily:'var(--font-body)'}}>Date</th>
-                                <th style={{textAlign:'left',padding:'4px 8px',fontSize:9.5,letterSpacing:'0.09em',textTransform:'uppercase',color:'var(--text3)'}}>Opponent</th>
-                                <th style={{textAlign:'right',padding:'4px 8px',fontSize:9.5,letterSpacing:'0.09em',textTransform:'uppercase',color:'var(--text3)'}}>Game Score</th>
-                                <th style={{textAlign:'right',padding:'4px 8px',fontSize:9.5,letterSpacing:'0.09em',textTransform:'uppercase',color:'var(--text3)'}}>Status</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {stint.rows.map((row,gi)=>(
-                                <tr key={gi} style={{borderBottom:'1px solid var(--border)',background:gi%2===0?'transparent':'rgba(0,0,0,0.02)'}}>
-                                  <td style={{padding:'5px 8px',fontFamily:'var(--font-mono)',color:'var(--text2)'}}>{row.date}</td>
-                                  <td style={{padding:'5px 8px',color:'var(--text2)'}}>{row.opp}</td>
-                                  <td style={{padding:'5px 8px',textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--blue)'}}>{Number(row.gmsc).toFixed(1)}</td>
-                                  <td style={{padding:'5px 8px',textAlign:'right',fontSize:11,color:row.event==='defend'?'var(--green)':row.event==='initial'?'var(--gold)':'var(--text3)'}}>
-                                    {row.event==='defend'?'🛡 Held':row.event==='initial'?'👑 Crowned':'✓'}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                        <ReignGameLog player={stint.player} crownRows={stint.rows}/>
 
                         {/* Dethroned section */}
                         {stint.loseToPlayer&&(
@@ -394,7 +451,7 @@ function FranchiseMap({stints,onPlayer}:{stints:Stint[];onPlayer:(p:string)=>voi
 export default function CrownPage(){
   const [rows,setRows]     =useState<CrownRow[]>([])
   const [loading,setLoading]=useState(true)
-  const [tab,setTab]       =useState<'leaderboard'|'timeline'|'map'|'methodology'>('leaderboard')
+  const [tab,setTab]       =useState<'leaderboard'|'timeline'|'methodology'>('leaderboard')
   const [lbSort,setLbSort] =useState<'totalGames'|'defenses'|'maxStreak'|'avgGames'|'possessions'>('totalGames')
   const [search,setSearch] =useState('')
   const [modal,setModal]   =useState<string|null>(null)
@@ -490,9 +547,9 @@ export default function CrownPage(){
         <div style={{background:'var(--blue)',padding:'12px 24px',display:'flex',alignItems:'center',gap:18,flexWrap:'wrap',flexShrink:0}}>
           <div style={{fontSize:28}}>👑</div>
           <div style={{flex:1,minWidth:160}}>
-            <div style={{fontSize:9,color:'rgba(255,255,255,0.45)',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2}}>Reigning Champion · 2026 Playoffs</div>
-            <div style={{fontFamily:'var(--font-head)',fontSize:22,color:'#fff',cursor:'pointer'}} onClick={()=>setModal(current.player)}>{current.player}</div>
-            <div style={{fontSize:11,color:'rgba(255,255,255,0.5)',marginTop:1}}>{FRANCHISE_NAMES[current.team]??current.team} · Reign {toRoman(current.stintNum)}</div>
+            <div style={{fontSize:9,color:'rgba(255,255,255,0.45)',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2}}>Reigning Monarch · 2026 Playoffs</div>
+            <div style={{fontFamily:'var(--font-head)',fontSize:22,color:'#fff',cursor:'pointer'}} onClick={()=>setModal(current.player)}>{current.player} {toRoman(current.stintNum)}</div>
+            <div style={{fontSize:11,color:'rgba(255,255,255,0.5)',marginTop:1}}>{FRANCHISE_NAMES[current.team]??current.team}</div>
           </div>
           {[['Streak',`${current.games}g`],['Total Held',`${playerStats.find(p=>p.player===current.player)?.totalGames??0}g`],['Unique Kings',`${new Set(rows.map(r=>r.crown_holder)).size}`],['Total Reigns',`${stints.length}`]].map(([l,v])=>(
             <div key={l} style={{textAlign:'center',flexShrink:0}}>
@@ -504,7 +561,7 @@ export default function CrownPage(){
       )}
 
       <div className="tab-bar" style={{flexShrink:0}}>
-        {([['leaderboard','Leaderboard'],['timeline','Reign Timeline'],['map','Crown Map'],['methodology','Methodology']] as [string,string][]).map(([k,l])=>(
+        {([['leaderboard','Leaderboard'],['timeline','Reign Timeline'],['methodology','Methodology']] as [string,string][]).map(([k,l])=>(
           <button key={k} className={`tab${tab===k?' active':''}`} onClick={()=>setTab(k as typeof tab)}>{l}</button>
         ))}
       </div>
@@ -566,8 +623,6 @@ export default function CrownPage(){
           </div>
         ):tab==='timeline'?(
           <ReignTimeline stints={stints} onPlayer={setModal}/>
-        ):tab==='map'?(
-          <FranchiseMap stints={stints} onPlayer={setModal}/>
         ):(
           <div style={{flex:1,overflowY:'auto',padding:'24px 32px',maxWidth:760,margin:'0 auto'}}>
             <div className="section-head">The Crown — Rules & Methodology</div>

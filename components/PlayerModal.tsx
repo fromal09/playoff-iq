@@ -215,6 +215,68 @@ function PctBar({label,value,p,isPct}:{label:string;value:number;p:number;isPct?
   )
 }
 
+
+// Reign game log for player modal (fetches box scores on demand)
+function ModalReignGameLog({player,crownRows}:{player:string;crownRows:CrownHistoryRow[]}){
+  const [boxScores,setBoxScores]=useState<Map<string,Record<string,unknown>>>(new Map())
+  const [boxLoading,setBoxLoading]=useState(true)
+  useEffect(()=>{
+    async function load(){
+      setBoxLoading(true)
+      const dates=crownRows.map(r=>r.date)
+      const {data}=await supabase.from('player_games')
+        .select('date,opp,result,team_score,opp_score,pts,ast,trb,stl,blk,tov,fg,fga,fg_pct,three_p,ft,fta,mp,gmsc_computed')
+        .eq('player',player).in('date',dates)
+      if(data){
+        const m=new Map<string,Record<string,unknown>>()
+        for(const row of data as Record<string,unknown>[]) m.set(row.date as string,row)
+        setBoxScores(m)
+      }
+      setBoxLoading(false)
+    }
+    load()
+  },[player,crownRows])
+  const fN=(v:unknown)=>v!=null?String(v):'—'
+  if(boxLoading) return<div style={{fontSize:11,color:'var(--text3)',padding:'6px 0'}}>Loading…</div>
+  return(
+    <div style={{overflowX:'auto'}}>
+      <table style={{borderCollapse:'collapse',fontSize:11.5,minWidth:500}}>
+        <thead><tr style={{borderBottom:'2px solid var(--text)'}}>
+          {['Date','Opp','Score','MIN','PTS','REB','AST','STL','BLK','TOV','FG','3P','FT%','GmSc',''].map(h=>(
+            <th key={h} style={{padding:'3px 6px',fontSize:9,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text3)',textAlign:['Date','Opp','Score'].includes(h)?'left':'right'}}>{h}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {crownRows.map((row,gi)=>{
+            const b=boxScores.get(row.date)
+            return(
+              <tr key={gi} style={{borderBottom:'1px solid var(--border)',background:gi%2===0?'transparent':'rgba(0,0,0,0.02)'}}>
+                <td style={{padding:'4px 6px',fontFamily:'var(--font-mono)',color:'var(--text2)',fontSize:11}}>{row.date}</td>
+                <td style={{padding:'4px 6px',color:'var(--text2)'}}>{row.opp}</td>
+                <td style={{padding:'4px 6px',whiteSpace:'nowrap'}}>
+                  {b?<span style={{fontFamily:'var(--font-mono)',color:(b.result as string)==='W'?'var(--green)':'var(--red)',fontWeight:600}}>{b.result as string} {b.team_score as number}–{b.opp_score as number}</span>:'—'}
+                </td>
+                <td style={{padding:'4px 6px',textAlign:'right',fontFamily:'var(--font-mono)',color:'var(--text2)'}}>{b?Math.round((b.mp as number)??0):'—'}</td>
+                <td style={{padding:'4px 6px',textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--blue)'}}>{fN(b?.pts)}</td>
+                <td style={{padding:'4px 6px',textAlign:'right',fontFamily:'var(--font-mono)'}}>{fN(b?.trb)}</td>
+                <td style={{padding:'4px 6px',textAlign:'right',fontFamily:'var(--font-mono)'}}>{fN(b?.ast)}</td>
+                <td style={{padding:'4px 6px',textAlign:'right',fontFamily:'var(--font-mono)'}}>{fN(b?.stl)}</td>
+                <td style={{padding:'4px 6px',textAlign:'right',fontFamily:'var(--font-mono)'}}>{fN(b?.blk)}</td>
+                <td style={{padding:'4px 6px',textAlign:'right',fontFamily:'var(--font-mono)',color:((b?.tov as number)>3)?'var(--red)':'inherit'}}>{fN(b?.tov)}</td>
+                <td style={{padding:'4px 6px',textAlign:'right',fontFamily:'var(--font-mono)',fontSize:10,whiteSpace:'nowrap'}}>{b?`${fN(b.fg)}/${fN(b.fga)}`:'—'}</td>
+                <td style={{padding:'4px 6px',textAlign:'right',fontFamily:'var(--font-mono)'}}>{fN(b?.three_p)}</td>
+                <td style={{padding:'4px 6px',textAlign:'right',fontFamily:'var(--font-mono)'}}>{b&&(b.fta as number)?`${fN(b.ft)}/${fN(b.fta)}`:'—'}</td>
+                <td style={{padding:'4px 6px',textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--blue)'}}>{b?Number(b.gmsc_computed).toFixed(1):Number(row.gmsc).toFixed(1)}</td>
+                <td style={{padding:'4px 6px',textAlign:'center',fontSize:11}}>{row.event==='defend'?'🛡':row.event==='initial'?'👑':''}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 // ── Main Modal ─────────────────────────────────────────────────────────────
 export default function PlayerModal({player,onClose}:{player:string;onClose:()=>void}){
   const [seasons,    setSeasons]    = useState<PlayerSeasonStats[]>([])
@@ -233,6 +295,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
   const [loading,    setLoading]    = useState(true)
   const [crownStats, setCrownStats] = useState<{total:number;defenses:number;maxStreak:number;losses:number}|null>(null)
   const [crownStints, setCrownStints] = useState<CrownStint[]>([])
+  const [modalExpandedReigns, setModalExpandedReigns] = useState<Set<string>>(new Set())
   const [frMode, setFrMode] = useState<'totals'|'pergame'>('totals')
   const [allGoatRows, setAllGoatRows] = useState<GoatGameRow[]>([])
   const [goatLoaded,  setGoatLoaded]  = useState(false)
