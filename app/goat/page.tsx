@@ -519,7 +519,7 @@ export default function GoatPage() {
                 <span style={{fontSize:11,color:'var(--text3)',marginLeft:12}}>Mountain silhouette of the top {Math.min(leaderboard.length,60)} playoff GOATs under current settings</span>
               </div>
               <div style={{background:'#060C18',borderRadius:4,padding:'0',marginBottom:8,overflow:'hidden'}}>
-                {(()=>{const maxAdj=leaderboard[0]?.adjSum??1;return<GoatRange players={leaderboard.map(r=>({player:r.player,adjScore:maxAdj>0?Math.round(r.adjSum/maxAdj*1000)/10:0,adjSum:r.adjSum,adjAvg:r.adjAvg,games:r.games,wins:r.wins,deepestRound:r.deepestRound}))} onPlayer={setModal}/>})()}
+                {(()=>{const useAvg=aggMode==='avg';const keyVal=(r:{adjSum:number;adjAvg:number})=>useAvg?r.adjAvg:r.adjSum;const maxAdj=Math.max(...leaderboard.map(keyVal),0.001);return<GoatRange players={leaderboard.map(r=>({player:r.player,adjScore:Math.round(keyVal(r)/maxAdj*1000)/10,games:r.games,wins:r.wins}))} onPlayer={setModal}/>})()}
               </div>
             </div>
           )}
