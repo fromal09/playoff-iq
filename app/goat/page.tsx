@@ -1,4 +1,5 @@
 'use client'
+import GoatRange from './GoatRange'
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import {
@@ -140,107 +141,6 @@ function Methodology() {
 const GOAT_PAGE = 50
 
 
-// ── GOAT Range Mountain ────────────────────────────────────────────────────
-function GoatRange({leaderboard,onPlayer}:{leaderboard:{player:string;adjScore:number;adjSum:number;adjAvg:number;games:number;wins:number;deepestRound:number}[];onPlayer:(p:string)=>void}){
-  const [hov,setHov]=useState<{player:string;score:number;x:number;y:number}|null>(null)
-  const TOP=60
-  const data=leaderboard.slice(0,TOP)
-  if(!data.length) return <div className="loading"><div className="spinner"/>Loading…</div>
-  const W=1100,H=360,PL=60,PR=60,PT=50,PB=80,IW=W-PL-PR,IH=H-PT-PB
-  const N=data.length
-  const sx=(i:number)=>PL+i/Math.max(N-1,1)*IW
-  const sy=(s:number)=>PT+IH*(1-s/100)
-  const pts=data.map((r,i)=>({x:sx(i),y:sy(r.adjScore),player:r.player,score:r.adjScore}))
-  // Build smooth bezier mountain path
-  function smoothPath(ps:{x:number;y:number}[]):string{
-    if(ps.length<2) return ''
-    let d=`M ${ps[0].x},${IH+PT}`
-    d+=` L ${ps[0].x},${ps[0].y}`
-    for(let i=0;i<ps.length-1;i++){
-      const cp1x=ps[i].x+(ps[i+1].x-ps[i].x)*0.4
-      const cp2x=ps[i+1].x-(ps[i+1].x-ps[i].x)*0.4
-      d+=` C ${cp1x},${ps[i].y} ${cp2x},${ps[i+1].y} ${ps[i+1].x},${ps[i+1].y}`
-    }
-    d+=` L ${ps[N-1].x},${IH+PT} Z`
-    return d
-  }
-  const mountainPath=smoothPath(pts)
-  const ridgeLine=pts.map((p,i)=>`${i===0?'M':'L'} ${p.x},${p.y}`).join(' ')
-  // Grid lines
-  const gridScores=[20,40,60,80,100]
-  return(
-    <div style={{position:'relative',overflowX:'auto'}}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',display:'block',cursor:'crosshair'}}
-        onMouseLeave={()=>setHov(null)}>
-        <defs>
-          <linearGradient id="mtnGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--blue)" stopOpacity="0.9"/>
-            <stop offset="60%" stopColor="var(--blue)" stopOpacity="0.5"/>
-            <stop offset="100%" stopColor="var(--blue)" stopOpacity="0.1"/>
-          </linearGradient>
-          <linearGradient id="mtnGrad2" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--gold2)" stopOpacity="0.3"/>
-            <stop offset="100%" stopColor="var(--gold2)" stopOpacity="0"/>
-          </linearGradient>
-        </defs>
-        {/* Grid */}
-        {gridScores.map(s=>(
-          <g key={s}>
-            <line x1={PL} y1={sy(s)} x2={W-PR} y2={sy(s)} stroke="var(--border)" strokeWidth={0.5} strokeDasharray="3,6"/>
-            <text x={PL-6} y={sy(s)+4} textAnchor="end" fontSize={9} fill="var(--text3)" fontFamily="var(--font-mono)">{s}</text>
-          </g>
-        ))}
-        {/* X axis */}
-        <line x1={PL} y1={PT+IH} x2={W-PR} y2={PT+IH} stroke="var(--border2)" strokeWidth={1}/>
-        {/* Mountain fill */}
-        <path d={mountainPath} fill="url(#mtnGrad)"/>
-        {/* Snow cap effect for top players */}
-        <path d={mountainPath} fill="url(#mtnGrad2)"/>
-        {/* Ridge line */}
-        <path d={ridgeLine} fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth={1.5}/>
-        {/* Peak dots + labels for top 15 */}
-        {pts.map((p,i)=>{
-          const isTop=i<15
-          const isVTop=i<5
-          return(
-            <g key={i} style={{cursor:'pointer'}} onClick={()=>onPlayer(p.player)}>
-              {isTop&&(
-                <circle cx={p.x} cy={p.y} r={isVTop?5:3} fill="rgba(255,255,255,0.9)" stroke="var(--blue2)" strokeWidth={1}/>
-              )}
-              {isVTop&&(
-                <>
-                  <line x1={p.x} y1={p.y-4} x2={p.x} y2={p.y-24} stroke="rgba(255,255,255,0.5)" strokeWidth={0.75}/>
-                  <text x={p.x} y={p.y-28} textAnchor="middle" fontSize={9} fontWeight={700} fill="var(--surface)" fontFamily="var(--font-body)" style={{textShadow:'0 1px 2px rgba(0,0,0,0.5)'}}>
-                    {p.player.split(' ').pop()}
-                  </text>
-                </>
-              )}
-              {/* Hover hit area */}
-              <rect x={p.x-8} y={PT} width={16} height={IH} fill="transparent"
-                onMouseEnter={()=>setHov({player:p.player,score:p.score,x:p.x,y:p.y})}/>
-            </g>
-          )
-        })}
-        {/* Y axis label */}
-        <text x={12} y={PT+IH/2} textAnchor="middle" fontSize={9} fill="var(--text3)" fontFamily="var(--font-body)" transform={`rotate(-90,12,${PT+IH/2})`}>GOAT SCORE (0–100)</text>
-        {/* X axis ranks */}
-        {[1,5,10,20,30,40,50].filter(n=>n<=N).map(n=>(
-          <text key={n} x={sx(n-1)} y={PT+IH+16} textAnchor="middle" fontSize={8} fill="var(--text3)" fontFamily="var(--font-mono)">#{n}</text>
-        ))}
-        {/* Hover crosshair */}
-        {hov&&<line x1={hov.x} y1={PT} x2={hov.x} y2={PT+IH} stroke="rgba(255,255,255,0.5)" strokeWidth={1} strokeDasharray="3,2"/>}
-      </svg>
-      {/* Hover tooltip */}
-      {hov&&(
-        <div style={{position:'absolute',left:Math.min(hov.x+12,900),top:Math.max(hov.y-10,10),background:'var(--surface)',border:'1px solid var(--border2)',borderRadius:3,padding:'6px 12px',fontSize:12,boxShadow:'var(--shadow2)',pointerEvents:'none',whiteSpace:'nowrap'}}>
-          <div style={{fontFamily:'var(--font-head)',fontWeight:700,color:'var(--blue)',marginBottom:2}}>{hov.player}</div>
-          <div style={{fontFamily:'var(--font-mono)',color:'var(--gold)',fontWeight:700}}>{hov.score.toFixed(1)}</div>
-        </div>
-      )}
-      <div style={{textAlign:'center',fontSize:11,color:'var(--text3)',marginTop:4}}>Top {N} players · hover peaks for details · click to open player card</div>
-    </div>
-  )
-}
 
 export default function GoatPage() {
   const [tab, setTab]         = useState<'methodology'|'heatmap'|'allgames'|'leaderboard'|'franchise'|'range'>('leaderboard')
@@ -618,8 +518,8 @@ export default function GoatPage() {
                 <div className="section-head" style={{display:'inline-block',paddingRight:24}}>GOAT Range</div>
                 <span style={{fontSize:11,color:'var(--text3)',marginLeft:12}}>Mountain silhouette of the top {Math.min(leaderboard.length,60)} playoff GOATs under current settings</span>
               </div>
-              <div style={{background:'var(--blue)',borderRadius:4,padding:'20px 16px',marginBottom:8}}>
-                {(()=>{const maxAdj=leaderboard[0]?.adjSum??1;return<GoatRange leaderboard={leaderboard.map(r=>({player:r.player,adjScore:maxAdj>0?Math.round(r.adjSum/maxAdj*1000)/10:0,adjSum:r.adjSum,adjAvg:r.adjAvg,games:r.games,wins:r.wins,deepestRound:r.deepestRound}))} onPlayer={setModal}/>})()}
+              <div style={{background:'#060C18',borderRadius:4,padding:'0',marginBottom:8,overflow:'hidden'}}>
+                {(()=>{const maxAdj=leaderboard[0]?.adjSum??1;return<GoatRange players={leaderboard.map(r=>({player:r.player,adjScore:maxAdj>0?Math.round(r.adjSum/maxAdj*1000)/10:0,adjSum:r.adjSum,adjAvg:r.adjAvg,games:r.games,wins:r.wins,deepestRound:r.deepestRound}))} onPlayer={setModal}/>})()}
               </div>
             </div>
           )}
