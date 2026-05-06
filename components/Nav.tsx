@@ -4,13 +4,11 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 
 const TABS = [
-  { href:'/database',     label:'Games'         },
-  { href:'/aggregate',    label:'Careers'       },
-  { href:'/goat',         label:'GOAT Index'    },
-  { href:'/crown',        label:'The Crown'     },
-  { href:'/crown-river',  label:'Crown River'   },
-  { href:'/franchise-map',label:'Map'           },
-  { href:'/admin',        label:'Admin'         },
+  { href:'/database',  label:'Games'      },
+  { href:'/aggregate', label:'Careers'    },
+  { href:'/goat',      label:'GOAT Index' },
+  { href:'/crown',     label:'The Crown'  },
+  { href:'/admin',     label:'Admin'      },
 ]
 
 const MOBILE_TABS = [

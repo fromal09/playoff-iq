@@ -5,6 +5,12 @@ import { FRANCHISE_NAMES, FRANCHISE_ROLLUP, HISTORICAL_TEAM_NAMES } from '@/lib/
 import { PRESETS, buildLeaderboard } from '@/lib/scoring'
 import type { PlayerSeasonStats, PlayerGame, GoatGameRow } from '@/lib/types'
 
+type CrownHistoryRow = {
+  id:number; date:string; season:number; team:string; opp:string; event:string
+  crown_holder:string; crown_team:string; prev_holder:string; gmsc:number; streak:number; total_games:number
+}
+type CrownStint = { rows:CrownHistoryRow[]; stintNum:number }
+
 const ALL_STAT_KEYS = ['pts_avg','ast_avg','trb_avg','orb_avg','drb_avg','stl_avg','blk_avg','tov_avg','bpm_avg','fg_pct_avg','three_p_pct_avg','ft_pct_avg','ts_pct_avg']
 const PROFILES: Record<string,{label:string;stats:string[]}> = {
   boxscore:{label:'Box Score',stats:['pts_avg','ast_avg','trb_avg','stl_avg','blk_avg']},
@@ -226,6 +232,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
   const [gameSort,   setGameSort]   = useState({col:'date',dir:'desc' as 'asc'|'desc'})
   const [loading,    setLoading]    = useState(true)
   const [crownStats, setCrownStats] = useState<{total:number;defenses:number;maxStreak:number;losses:number}|null>(null)
+  const [crownStints, setCrownStints] = useState<CrownStint[]>([])
   const [frMode, setFrMode] = useState<'totals'|'pergame'>('totals')
   const [allGoatRows, setAllGoatRows] = useState<GoatGameRow[]>([])
   const [goatLoaded,  setGoatLoaded]  = useState(false)
@@ -271,17 +278,38 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
         setTopThresholds({t10:sorted[9]??0,t100:sorted[99]??0,t500:sorted[499]??0,t1k:sorted[999]??0})
       }
       setLoading(false)
-      // Load crown stats
-      const {data:crownData} = await supabase.from('crown_history').select('event,streak,total_games').eq('crown_holder',player)
+      // Load crown stats — also load stints for Reign History
+      const {data:crownData} = await supabase.from('crown_history').select('*').eq('crown_holder',player).order('date',{ascending:true})
       if(crownData?.length){
-        const defenses=(crownData as {event:string;streak:number;total_games:number}[]).filter(r=>r.event==='defend').length
-        const losses=(crownData as {event:string;streak:number;total_games:number}[]).filter((_,i,a)=>{
-          // count times this player lost the crown = transfer events in the next row where prev_holder===player
-          return false // handled below
-        }).length
-        const maxStreak=Math.max(...(crownData as {streak:number}[]).map(r=>r.streak))
-        const totalGames=Math.max(...(crownData as {total_games:number}[]).map(r=>r.total_games))
+        const cd=crownData as CrownHistoryRow[]
+        const totalGames=cd.length  // every row = one game held
+        const defenses=cd.filter(r=>r.event==='defend').length
+        const maxStreak=Math.max(...cd.map(r=>r.streak))
         setCrownStats({total:totalGames,defenses,maxStreak,losses:0})
+        // Build reign stints
+        const reigns:CrownStint[]=[]
+        let si=0
+        while(si<cd.length){
+          const stintRows:CrownHistoryRow[]=[]
+          while(si<cd.length){stintRows.push(cd[si]);si++}
+          // Actually stints are consecutive blocks — since we only have this player's rows, each "new" acquisition = new stint
+          break
+        }
+        // Build stints properly: split on non-defend events (each new acquisition = new stint)
+        const allStints:CrownStint[]=[]
+        let cur:CrownHistoryRow[]=[]
+        for(const row of cd){
+          if(cur.length>0 && row.event!=='defend'){
+            // This row starts a new stint — save old one first? No: each row IS a game in the stint
+            // A stint = consecutive rows for this player. Since cd is already filtered to this player,
+            // each row is one game. A "new stint" starts when event != defend (means they just acquired it)
+            allStints.push({rows:cur,stintNum:allStints.length+1})
+            cur=[]
+          }
+          cur.push(row)
+        }
+        if(cur.length>0) allStints.push({rows:cur,stintNum:allStints.length+1})
+        setCrownStints(allStints)
       }
       // Phase 2: all season data for spaghetti + badges
       if(cancelled) return
@@ -574,11 +602,6 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                 {(allSeasonData.length>0||topThresholds)&&(
                   <div style={{marginBottom:20,display:'grid',gridTemplateColumns:'auto 1fr',gap:'8px 16px',alignItems:'start'}}>
                     {[
-                      ['👑 THE CROWN', crownStats?[
-                        crownStats.total>0?`${crownStats.total} Games Held`:null,
-                        crownStats.defenses>0?`${crownStats.defenses} Successful Defenses`:null,
-                        crownStats.maxStreak>1?`${crownStats.maxStreak}-Game Longest Streak`:null,
-                      ].filter(Boolean) as string[]:[]],
                       ['ALL-TIME CAREER', [
                         careerRank?`#${careerRank} All-Time Career Game Score`:null,
                         goatRanks?.balanced?.rank?`#${goatRanks.balanced?.rank} Balanced GOAT`:null,
@@ -602,6 +625,13 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                         badges.g500>0?`${badges.g500}× Top-500 Game`:null,
                         badges.g1k>0?`${badges.g1k}× Top-1K Game`:null,
                       ].filter(Boolean) as string[]],
+                      ...(crownStats&&crownStats.total>0?[
+                        ['👑 THE CROWN', [
+                          `${crownStats.total} Games Held`,
+                          crownStats.defenses>0?`${crownStats.defenses} Successful Defenses`:null,
+                          crownStats.maxStreak>1?`Best Streak: ${crownStats.maxStreak} Games`:null,
+                        ].filter(Boolean) as string[]]
+                      ]:[]),
                     ].filter(([,items])=>(items as string[]).length>0).map(([label,items])=>(
                       <><div key={label as string} style={{fontSize:10,fontWeight:700,color:'var(--text3)',letterSpacing:'0.08em',textTransform:'uppercase',paddingTop:4,whiteSpace:'nowrap'}}>{label as string}</div>
                       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
@@ -679,6 +709,68 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                   </div>
                 )}
 
+
+                {/* Reign History */}
+                {crownStints.length>0&&(
+                  <div style={{marginBottom:20}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'var(--text3)',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:10,borderTop:'2px solid var(--text)',paddingTop:8}}>
+                      👑 Reign History — {crownStints.length} {crownStints.length===1?'Reign':'Reigns'}
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                      {crownStints.slice().reverse().map((stint)=>{
+                        const games=stint.rows.length
+                        const start=stint.rows[0].date
+                        const end=stint.rows[stint.rows.length-1].date
+                        const team=stint.rows[0].crown_team
+                        const acquireEvent=stint.rows[0].event
+                        const dethronedBy=null // crown_history only has who took it, not who lost it here
+                        const borderW=games>=5?2:games>=3?1.5:1
+                        const bgAlpha=games>=5?0.06:games>=3?0.04:0.02
+                        // Roman numeral
+                        const n=stint.stintNum
+                        function toRoman(num:number):string{
+                          const v=[1000,900,500,400,100,90,50,40,10,9,5,4,1]
+                          const s=['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I']
+                          let r='',i=0
+                          while(num>0){while(num>=v[i]){r+=s[i];num-=v[i]}i++}
+                          return r
+                        }
+                        const eventLabel = acquireEvent==='initial'?'First Ever':acquireEvent==='new_season'?'New Season':acquireEvent==='transfer_loss'?'Wrested Away':'From Teammate'
+                        return(
+                          <div key={stint.stintNum} style={{
+                            border:`${borderW}px solid ${games>=4?'var(--gold)':'var(--border)'}`,
+                            borderLeft:`3px solid ${games>=5?'var(--gold)':games>=3?'var(--blue)':'var(--border)'}`,
+                            borderRadius:3, padding:'10px 14px',
+                            background:`rgba(27,46,94,${bgAlpha})`,
+                          }}>
+                            <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:4,flexWrap:'wrap'}}>
+                              <span style={{fontFamily:'var(--font-head)',fontSize:14,fontWeight:700,color:games>=4?'var(--gold)':'var(--blue)'}}>
+                                Reign {toRoman(n)}
+                              </span>
+                              <span style={{fontSize:11,color:'var(--text3)',fontFamily:'var(--font-mono)'}}>
+                                {start}{start!==end?` → ${end}`:''} · {team}
+                              </span>
+                              <span style={{fontSize:10,background:games>=4?'var(--gold-dim)':'var(--surface2)',border:`1px solid ${games>=4?'var(--gold)':'var(--border)'}`,borderRadius:2,padding:'1px 6px',color:games>=4?'var(--gold)':'var(--text3)',fontWeight:600}}>
+                                {games}g {games>=5?'⚡':games>=3?'🔥':''}
+                              </span>
+                              <span style={{fontSize:10,color:'var(--text3)'}}>{eventLabel}</span>
+                            </div>
+                            {/* Games list for longer reigns */}
+                            {games>1&&(
+                              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:4}}>
+                                {(stint.rows as CrownHistoryRow[]).map((row:CrownHistoryRow,gi:number)=>(
+                                  <span key={gi} style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text3)',background:'var(--surface2)',padding:'1px 5px',borderRadius:2,border:'1px solid var(--border)'}}>
+                                    {row.date.slice(5)} vs {row.opp} · {Number(row.gmsc).toFixed(1)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
                 {/* Career Highlights */}
                 {highlights&&(
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,marginBottom:20}}>
