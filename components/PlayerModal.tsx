@@ -225,6 +225,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
   const [subTab,     setSubTab]     = useState<'overview'|'radar'|'seasons'|'games'>('overview')
   const [gameSort,   setGameSort]   = useState({col:'date',dir:'desc' as 'asc'|'desc'})
   const [loading,    setLoading]    = useState(true)
+  const [crownStats, setCrownStats] = useState<{total:number;defenses:number;maxStreak:number;losses:number}|null>(null)
   const [frMode, setFrMode] = useState<'totals'|'pergame'>('totals')
   const [allGoatRows, setAllGoatRows] = useState<GoatGameRow[]>([])
   const [goatLoaded,  setGoatLoaded]  = useState(false)
@@ -270,6 +271,18 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
         setTopThresholds({t10:sorted[9]??0,t100:sorted[99]??0,t500:sorted[499]??0,t1k:sorted[999]??0})
       }
       setLoading(false)
+      // Load crown stats
+      const {data:crownData} = await supabase.from('crown_history').select('event,streak,total_games').eq('crown_holder',player)
+      if(crownData?.length){
+        const defenses=(crownData as {event:string;streak:number;total_games:number}[]).filter(r=>r.event==='defend').length
+        const losses=(crownData as {event:string;streak:number;total_games:number}[]).filter((_,i,a)=>{
+          // count times this player lost the crown = transfer events in the next row where prev_holder===player
+          return false // handled below
+        }).length
+        const maxStreak=Math.max(...(crownData as {streak:number}[]).map(r=>r.streak))
+        const totalGames=Math.max(...(crownData as {total_games:number}[]).map(r=>r.total_games))
+        setCrownStats({total:totalGames,defenses,maxStreak,losses:0})
+      }
       // Phase 2: all season data for spaghetti + badges
       if(cancelled) return
       const allSeas:{player:string;season:number;gmsc_sum:number}[]=[]
@@ -561,6 +574,11 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                 {(allSeasonData.length>0||topThresholds)&&(
                   <div style={{marginBottom:20,display:'grid',gridTemplateColumns:'auto 1fr',gap:'8px 16px',alignItems:'start'}}>
                     {[
+                      ['👑 THE CROWN', crownStats?[
+                        crownStats.total>0?`${crownStats.total} Games Held`:null,
+                        crownStats.defenses>0?`${crownStats.defenses} Successful Defenses`:null,
+                        crownStats.maxStreak>1?`${crownStats.maxStreak}-Game Longest Streak`:null,
+                      ].filter(Boolean) as string[]:[]],
                       ['ALL-TIME CAREER', [
                         careerRank?`#${careerRank} All-Time Career Game Score`:null,
                         goatRanks?.balanced?.rank?`#${goatRanks.balanced?.rank} Balanced GOAT`:null,
