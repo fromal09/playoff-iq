@@ -201,13 +201,14 @@ function ReignTimeline({stints,onPlayer,currentPlayer}:{stints:Stint[];onPlayer:
                   <div style={{
                     border:isCurrent?`2px solid #9A6E1C`:`1px solid ${rs.borderColor}`,
                     borderLeft:isCurrent?`5px solid #9A6E1C`:`4px solid ${rs.borderColor}`,
-                    borderRadius:4, marginBottom:8, overflow:'hidden',
+                    borderRadius:4, marginBottom:isCurrent?16:8, overflow:'hidden',
                     background:rs.bg,
-                    boxShadow:isCurrent?'0 4px 20px rgba(154,110,28,0.20)':stint.games>=5?'0 2px 12px rgba(154,110,28,0.12)':undefined
+                    marginLeft:isCurrent?-20:0, marginRight:isCurrent?-20:0,
+                    boxShadow:isCurrent?'0 6px 28px rgba(154,110,28,0.25), 0 2px 8px rgba(154,110,28,0.15)':stint.games>=5?'0 2px 12px rgba(154,110,28,0.12)':undefined
                   }}>
                     {/* Reign header */}
                     <div style={{
-                      padding:'10px 14px', background:rs.headerBg,
+                      padding:isCurrent?'16px 20px':'10px 14px', background:rs.headerBg,
                       display:'flex',alignItems:'flex-start',gap:12,flexWrap:'wrap',
                       borderBottom:`1px solid ${rs.borderColor}`,
                       cursor:'pointer'
@@ -219,12 +220,9 @@ function ReignTimeline({stints,onPlayer,currentPlayer}:{stints:Stint[];onPlayer:
 
                       <div style={{flex:1,minWidth:0}}>
                         {/* Title line */}
-                        <div style={{fontFamily:'var(--font-head)',fontSize:isCurrent?22:stint.games>=5?18:stint.games>=3?16:14,fontWeight:700,color:rs.accentColor,lineHeight:1.2,marginBottom:3}}>
-                          Reign of King {stint.player}
-                          <span style={{fontFamily:'var(--font-head)',fontSize:stint.games>=3?14:12,fontWeight:400,fontStyle:'italic',marginLeft:8,color:'var(--text2)'}}>
-                            {toRoman(stint.stintNum)}
-                          </span>
-                        </div>
+                        <div style={{fontFamily:'var(--font-reign)',fontSize:isCurrent?22:stint.games>=5?17:stint.games>=3?15:13,fontWeight:800,color:rs.accentColor,lineHeight:1.3,marginBottom:3,letterSpacing:'0.03em'}}>
+                              King {stint.player} {toRoman(stint.stintNum)}
+                            </div>
 
                         {/* Subtitle */}
                         <div style={{display:'flex',gap:12,flexWrap:'wrap',fontSize:12,color:'var(--text2)'}}>

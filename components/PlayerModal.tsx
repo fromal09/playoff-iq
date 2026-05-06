@@ -296,6 +296,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
   const [crownStats, setCrownStats] = useState<{total:number;defenses:number;maxStreak:number;losses:number}|null>(null)
   const [crownStints, setCrownStints] = useState<CrownStint[]>([])
   const [modalExpandedReigns, setModalExpandedReigns] = useState<Set<string>>(new Set())
+  const [isCurrentCrownHolder, setIsCurrentCrownHolder] = useState(false)
   const [frMode, setFrMode] = useState<'totals'|'pergame'>('totals')
   const [allGoatRows, setAllGoatRows] = useState<GoatGameRow[]>([])
   const [goatLoaded,  setGoatLoaded]  = useState(false)
@@ -342,6 +343,9 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
       }
       setLoading(false)
       // Load crown stats — also load stints for Reign History
+      // Check if this player is the current crown holder
+      const {data:lastCrown} = await supabase.from('crown_history').select('crown_holder').order('date',{ascending:false}).limit(1)
+      setIsCurrentCrownHolder(lastCrown?.[0]?.crown_holder === player)
       const {data:crownData} = await supabase.from('crown_history').select('*').eq('crown_holder',player).order('date',{ascending:true})
       if(crownData?.length){
         const cd=crownData as CrownHistoryRow[]
@@ -794,7 +798,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                           return r
                         }
                         // Is this the current/active reign? (most recent = ridx===0, not yet dethroned)
-                        const isActive=ridx===0
+                        const isActive=ridx===0&&isCurrentCrownHolder
                         const accentColor=isActive?'#9A6E1C':games>=5?'var(--gold)':games>=3?'var(--blue)':'var(--text3)'
                         const borderColor=isActive?'#9A6E1C':games>=5?'#9A6E1C':games>=3?'var(--blue)':'var(--border)'
                         const headerBg=isActive?'rgba(154,110,28,0.13)':games>=5?'rgba(154,110,28,0.10)':games>=3?'rgba(27,46,94,0.08)':'var(--surface2)'
@@ -806,10 +810,12 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                             border:isActive?`2px solid #9A6E1C`:`1px solid ${borderColor}`,
                             borderLeft:isActive?`5px solid #9A6E1C`:`4px solid ${borderColor}`,
                             borderRadius:4,overflow:'hidden',
-                            boxShadow:isActive?'0 4px 16px rgba(154,110,28,0.18)':games>=5?'0 2px 8px rgba(154,110,28,0.10)':undefined
+                            marginLeft:isActive?-14:0,marginRight:isActive?-14:0,
+                            marginBottom:isActive?12:0,
+                            boxShadow:isActive?'0 4px 20px rgba(154,110,28,0.22)':games>=5?'0 2px 8px rgba(154,110,28,0.10)':undefined
                           }}>
                             {/* Header */}
-                            <div style={{padding:'9px 12px',background:headerBg,cursor:'pointer',display:'flex',alignItems:'flex-start',gap:10}}
+                            <div style={{padding:isActive?'14px 16px':'9px 12px',background:headerBg,cursor:'pointer',display:'flex',alignItems:'flex-start',gap:10}}
                               onClick={()=>setModalExpandedReigns(s=>{const ns=new Set(s);ns.has(cardKey)?ns.delete(cardKey):ns.add(cardKey);return ns})}>
                               <div style={{fontSize:isActive?20:games>=5?18:games>=3?16:14,lineHeight:1,flexShrink:0,paddingTop:1}}>
                                 {isActive?'👑':games>=5?'🏅':'🔸'}
@@ -820,7 +826,7 @@ export default function PlayerModal({player,onClose}:{player:string;onClose:()=>
                                     ⚔ Active Reign
                                   </span>
                                 )}
-                                <div style={{fontFamily:'var(--font-head)',fontSize:isActive?17:games>=5?15:games>=3?13:12,fontWeight:700,color:accentColor,marginBottom:2}}>
+                                <div style={{fontFamily:'var(--font-reign)',fontSize:isActive?18:games>=5?15:games>=3?13:12,fontWeight:800,color:accentColor,marginBottom:2,letterSpacing:'0.03em'}}>
                                   King {player} {toRomanM(n)}
                                 </div>
                                 <div style={{display:'flex',gap:8,fontSize:11,color:'var(--text2)',flexWrap:'wrap'}}>
