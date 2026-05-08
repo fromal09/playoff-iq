@@ -6,7 +6,7 @@ import { useState } from 'react'
 const TABS = [
   { href:'/database',  label:'Games'      },
   { href:'/aggregate', label:'Careers'    },
-  { href:'/playoffs',  label:'Playoffs'   },
+  { href:'/playoffs',  label:'2026 Playoffs'},
   { href:'/goat',      label:'GOAT Index' },
   { href:'/crown',     label:'The Crown'  },
   { href:'/admin',     label:'Admin'      },

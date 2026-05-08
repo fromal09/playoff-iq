@@ -235,6 +235,8 @@ export default function PlayoffsPage() {
                 <Th col="tov"      ch="TOV"/>
                 <th className="num" style={{fontSize:13}}>FG%</th>
                 <th className="num" style={{fontSize:13}}>FT%</th>
+                <th className="num" style={{fontSize:13,color:'var(--blue)',borderLeft:'1px solid var(--border)'}}>All-Time Rank</th>
+                <th className="num" style={{fontSize:13,color:'var(--blue)'}}>2026 Movement</th>
               </tr>
             </thead>
             <tbody>
@@ -267,6 +269,12 @@ export default function PlayoffsPage() {
                       <td className="num" style={{fontSize:13,color:p.tov>3?'var(--red)':'inherit'}}>{n1(p.tov)}</td>
                       <td className="num" style={{fontSize:13}}>{p.fg_pct!=null?p.fg_pct.toFixed(1)+'%':'—'}</td>
                       <td className="num" style={{fontSize:13}}>{p.ft_pct!=null?p.ft_pct.toFixed(1)+'%':'—'}</td>
+                      <td className="num" style={{fontSize:13,borderLeft:'1px solid var(--border)',fontFamily:'var(--font-mono)',color:careerTotals.size>0?'var(--blue)':'var(--text3)',fontWeight:700}}>
+                        {careerTotals.size>0?`#${p.currentRank}`:'…'}
+                      </td>
+                      <td className="num" style={{fontSize:13,fontFamily:'var(--font-mono)',fontWeight:700,color:rankChange(p)>0?'var(--green)':rankChange(p)<0?'var(--red)':'var(--text3)'}}>
+                        {careerTotals.size>0?(rankChange(p)>0?`▲${rankChange(p)}`:rankChange(p)<0?`▼${Math.abs(rankChange(p))}`:'—'):'…'}
+                      </td>
                     </tr>
 
                     {/* Expanded rank row */}
