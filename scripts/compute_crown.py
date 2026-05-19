@@ -5,8 +5,8 @@ Processes player_games.csv chronologically to determine crown history.
 import csv, json
 from collections import defaultdict
 
-SRC = '/home/claude/nba-playoff-db/output/player_games.csv'
-OUT = '/home/claude/nba-playoff-db/output/crown_history.csv'
+SRC = '/Users/adam.fromal/nba-playoff-db/output/player_games.csv'
+OUT = '/Users/adam.fromal/nba-playoff-db/output/crown_history.csv'
 
 def gmsc(row):
     try: return float(row.get('gmsc_computed') or 0)

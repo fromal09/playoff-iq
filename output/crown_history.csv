@@ -1459,3 +1459,8 @@ date,season,team,opp,event,crown_holder,crown_team,prev_holder,prev_team,gmsc,st
 2026-04-22,2026,OKC,PHO,transfer_teammate,Shai Gilgeous-Alexander,OKC,Jalen Williams,OKC,30.50,1,1
 2026-04-25,2026,OKC,PHO,defend,Shai Gilgeous-Alexander,OKC,Shai Gilgeous-Alexander,OKC,38.60,2,2
 2026-04-27,2026,OKC,PHO,defend,Shai Gilgeous-Alexander,OKC,Shai Gilgeous-Alexander,OKC,25.40,3,3
+2026-05-05,2026,OKC,LAL,transfer_teammate,Chet Holmgren,OKC,Shai Gilgeous-Alexander,OKC,24.30,1,1
+2026-05-07,2026,OKC,LAL,defend,Chet Holmgren,OKC,Chet Holmgren,OKC,24.50,2,2
+2026-05-09,2026,OKC,LAL,transfer_teammate,Ajay Mitchell,OKC,Chet Holmgren,OKC,26.50,1,1
+2026-05-11,2026,OKC,LAL,transfer_teammate,Shai Gilgeous-Alexander,OKC,Ajay Mitchell,OKC,26.30,1,1
+2026-05-18,2026,SAS,OKC,transfer_loss,Victor Wembanyama,SAS,Shai Gilgeous-Alexander,OKC,40.10,1,1
